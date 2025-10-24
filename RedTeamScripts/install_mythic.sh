@@ -2,7 +2,7 @@
 
 ################################################################################
 # Mythic C2 Framework Installation Script
-# For Debian-based Linux distributions
+# For Debian-based Linux distributions (Debian, Ubuntu, Kali, etc.)
 # Bulletproof installation with comprehensive error handling
 ################################################################################
 
@@ -154,11 +154,16 @@ main() {
 
     # Step 2: Install Linux headers
     print_info "Step 2/10: Installing Linux headers for kernel $(uname -r)..."
-    if execute_with_retry sudo apt install -y linux-headers-$(uname -r); then
+    if execute_with_retry sudo apt install -y linux-headers-$(uname -r) 2>/dev/null; then
         print_success "Linux headers installed successfully."
     else
         print_warning "Failed to install exact kernel headers, attempting generic install..."
-        sudo apt install -y linux-headers-generic || print_warning "Could not install headers, continuing anyway..."
+        if sudo apt install -y linux-headers-generic 2>/dev/null; then
+            print_success "Generic Linux headers installed successfully."
+        else
+            print_warning "Could not install kernel headers, continuing anyway..."
+            print_info "Note: This may not affect Mythic installation as it primarily uses Docker."
+        fi
     fi
     echo ""
 
@@ -173,12 +178,26 @@ main() {
     echo ""
 
     # Step 4: Install Docker and dependencies
-    print_info "Step 4/10: Installing Docker, Git, and Docker Compose..."
-    if execute_with_retry sudo DEBIAN_FRONTEND=noninteractive apt install -y docker.io git docker-compose; then
+    print_info "Step 4/10: Installing Docker, Git, Docker Compose, and build tools..."
+
+    # Try to install docker-compose first, fallback to docker-compose-plugin if not available
+    DOCKER_COMPOSE_PKG="docker-compose"
+    if ! apt-cache show docker-compose &>/dev/null; then
+        print_info "docker-compose not found in repositories, will try docker-compose-plugin..."
+        DOCKER_COMPOSE_PKG="docker-compose-plugin"
+    fi
+
+    if execute_with_retry sudo DEBIAN_FRONTEND=noninteractive apt install -y docker.io git ${DOCKER_COMPOSE_PKG} make build-essential; then
         print_success "Docker and dependencies installed successfully."
     else
-        print_error "Failed to install Docker and dependencies."
-        exit 1
+        print_warning "Failed to install all packages, attempting without docker-compose..."
+        if execute_with_retry sudo DEBIAN_FRONTEND=noninteractive apt install -y docker.io git make build-essential; then
+            print_success "Docker and build tools installed successfully."
+            print_warning "docker-compose may need to be installed manually if required."
+        else
+            print_error "Failed to install Docker and dependencies."
+            exit 1
+        fi
     fi
     echo ""
 
@@ -212,9 +231,15 @@ main() {
 
     # Refresh group membership without logout
     print_info "Refreshing group membership..."
-    newgrp docker << EOFGROUP
-    print_success "Group membership refreshed (docker group active)."
+    if newgrp docker << EOFGROUP
+exit
 EOFGROUP
+    then
+        print_success "Group membership refreshed (docker group active)."
+    else
+        print_warning "Could not refresh group membership automatically."
+        print_info "You may need to log out and back in, or run: newgrp docker"
+    fi
     echo ""
 
     # Step 7: Clone Mythic repository
