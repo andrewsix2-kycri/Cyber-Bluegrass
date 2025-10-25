@@ -327,6 +327,29 @@ EOFGROUP
     fi
     echo ""
 
+    # Modify .env file
+    print_info "Customizing Mythic configuration..."
+    if [ -f ".env" ]; then
+        sed -i 's/DEFAULT_OPERATION_NAME="Operation Chimera"/DEFAULT_OPERATION_NAME="Operation Bluegrass"/' .env
+        sed -i 's/MYTHIC_DOCKER_NETWORKING="bridge"/MYTHIC_DOCKER_NETWORKING="host"/' .env
+        sed -i 's/MYTHIC_SERVER_DYNAMIC_PORTS_BIND_LOCALHOST_ONLY="true"/MYTHIC_SERVER_DYNAMIC_PORTS_BIND_LOCALHOST_ONLY="false"/' .env
+        print_success "Configuration updated successfully."
+    else
+        print_error ".env file not found. Cannot customize configuration."
+        exit 1
+    fi
+    echo ""
+
+    # Restart Mythic with new configuration
+    print_info "Restarting Mythic with updated configuration..."
+    if sudo -E ./mythic-cli start; then
+        print_success "Mythic restarted successfully with new configuration!"
+    else
+        print_error "Failed to restart Mythic C2 framework."
+        exit 1
+    fi
+    echo ""
+
     # Display credentials
     echo -e "${GREEN}================================================================"
     echo "                 INSTALLATION COMPLETE!"
