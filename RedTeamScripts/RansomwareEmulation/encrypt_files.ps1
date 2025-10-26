@@ -618,10 +618,13 @@ Operation aborted.
         "`"$archivePath`"",        # Archive path
         "*",                       # Files to archive (wildcard unquoted)
         "-r",                      # Recursive
-        "-x!$ArchiveName",         # Exclude the archive itself
-        "-x!encrypt_files.bat",    # Exclude batch script
-        "-x!encrypt_files.ps1",    # Exclude PowerShell script
-        "-x!7z.exe"                # Exclude 7z executable
+        "-xr-!$ArchiveName",       # Exclude the archive itself (no recursion)
+        "-xr-!encrypt_files.bat",  # Exclude batch script
+        "-xr-!encrypt_files.ps1",  # Exclude PowerShell script
+        "-xr-!7z.exe",             # Exclude 7z executable
+        "-xr-!7z2501-x64.msi",     # Exclude MSI installer
+        "-xr-!7z2501-x64.exe",     # Exclude x64 EXE installer
+        "-xr-!7z2501-arm64.exe"    # Exclude ARM64 EXE installer
     )
 
     if ($DebugMode) {
