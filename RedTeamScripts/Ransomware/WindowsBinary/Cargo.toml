@@ -1,0 +1,21 @@
+[package]
+name = "encrypt_files"
+version = "1.0.0"
+edition = "2021"
+authors = ["Red Team Operations"]
+
+[dependencies]
+# Minimal dependencies - only essential crates
+base64 = "0.21"           # For password encoding
+rand = "0.8"              # For random password generation
+reqwest = { version = "0.11", features = ["blocking"] }  # For HTTP downloads
+
+[profile.release]
+opt-level = "z"           # Optimize for size
+lto = true                # Link-time optimization
+codegen-units = 1         # Better optimization
+strip = true              # Strip symbols
+panic = "abort"           # Smaller binary
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["shellapi", "winuser", "processthreadsapi", "winbase", "handleapi", "windef"] }

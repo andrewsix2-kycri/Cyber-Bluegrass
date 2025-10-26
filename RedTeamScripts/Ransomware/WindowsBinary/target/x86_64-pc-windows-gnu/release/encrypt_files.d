@@ -1,0 +1,1 @@
+/home/opcode/Code/Github/CyberBluegrass/Cyber-Bluegrass/RedTeamScripts/Ransomware/WindowsBinary/target/x86_64-pc-windows-gnu/release/encrypt_files.exe: /home/opcode/Code/Github/CyberBluegrass/Cyber-Bluegrass/RedTeamScripts/Ransomware/WindowsBinary/7z.exe /home/opcode/Code/Github/CyberBluegrass/Cyber-Bluegrass/RedTeamScripts/Ransomware/WindowsBinary/src/main.rs
