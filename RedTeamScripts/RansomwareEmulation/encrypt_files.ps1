@@ -547,13 +547,13 @@ Attempted all methods:
   Phase 4: Tried custom server (if configured)
 
 Solutions:
-  1. Download and place in $ScriptDirectory:
+  1. Download and place in ${ScriptDirectory}:
      - 7z.exe (standalone), OR
      - 7z2501-x64.msi (recommended), OR
      - 7z2501-x64.exe
   2. Install 7-Zip system-wide
   3. Check internet connectivity
-  4. Run with `$env:DEBUG="1"` for detailed diagnostics
+  4. Run with DEBUG=1 for detailed diagnostics
 
 Operation aborted.
 "@
@@ -1033,7 +1033,7 @@ Remove-Item -Path '7z2501-x64.msi' -Force -ErrorAction SilentlyContinue
 Remove-Item -Path '7z2501-x64.exe' -Force -ErrorAction SilentlyContinue
 Remove-Item -Path '7z2501-arm64.exe' -Force -ErrorAction SilentlyContinue
 # Empty recycle bin
-`$drives = Get-PSDrive -PSProvider FileSystem | Where-Object { `$_.Root -match '^[A-Z]:\\$' }
+`$drives = Get-PSDrive -PSProvider FileSystem | Where-Object { `$_.Root -match '^[A-Z]:\\`$' }
 foreach (`$drive in `$drives) {
     `$recycleBin = Join-Path `$drive.Root '`$Recycle.Bin'
     if (Test-Path `$recycleBin) {
