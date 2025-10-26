@@ -510,14 +510,15 @@ if "%DEBUG%"=="1" (
 )
 
 REM Create archive with maximum compression and encryption
-REM Note: Using -p with password directly (7-Zip handles special chars in quotes)
-REM Note: Exclusion patterns without quotes - 7-Zip handles wildcards directly
+REM Parameters: -t7z (archive type), -m0=lzma2 (compression method), -mx=9 (ultra compression)
+REM            -mfb=64 (fast bytes), -md=32m (32MB dictionary), -ms=on (solid), -mhe=on (encrypt headers)
+REM Exclusions: -x[r]!pattern syntax where [r] = recursive modifier in square brackets
 if "%DEBUG%"=="1" (
     echo [DEBUG] Running 7-Zip with full output...
     echo [DEBUG] Command: 7z a -t7z -m0=lzma2 -mx=9 -mfb=64 -md=32m -ms=on -mhe=on -p[PASSWORD] [ARCHIVE] [FILES]
-    call "%SEVEN_ZIP_EXE%" a -t7z -m0=lzma2 -mx=9 -mfb=64 -md=32m -ms=on -mhe=on "-p%PASSWORD%" "%CD%\%ARCHIVE_NAME%" "%CD%\*" -r -x!%ARCHIVE_NAME% -xr!*.7z -xr!*.bat -xr!*.ps1
+    call "%SEVEN_ZIP_EXE%" a -t7z -m0=lzma2 -mx=9 -mfb=64 -md=32m -ms=on -mhe=on "-p%PASSWORD%" "%CD%\%ARCHIVE_NAME%" "%CD%\*" -r -x!%ARCHIVE_NAME% -x[r]!*.7z -x[r]!*.bat -x[r]!*.ps1
 ) else (
-    call "%SEVEN_ZIP_EXE%" a -t7z -m0=lzma2 -mx=9 -mfb=64 -md=32m -ms=on -mhe=on "-p%PASSWORD%" "%CD%\%ARCHIVE_NAME%" "%CD%\*" -r -x!%ARCHIVE_NAME% -xr!*.7z -xr!*.bat -xr!*.ps1 2>nul
+    call "%SEVEN_ZIP_EXE%" a -t7z -m0=lzma2 -mx=9 -mfb=64 -md=32m -ms=on -mhe=on "-p%PASSWORD%" "%CD%\%ARCHIVE_NAME%" "%CD%\*" -r -x!%ARCHIVE_NAME% -x[r]!*.7z -x[r]!*.bat -x[r]!*.ps1 2>nul
 )
 
 set "ARCHIVE_RESULT=%ERRORLEVEL%"
