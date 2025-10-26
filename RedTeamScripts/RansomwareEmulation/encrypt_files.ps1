@@ -617,14 +617,7 @@ Operation aborted.
         "-p`"$Password`"",         # Password (quoted for special chars)
         "`"$archivePath`"",        # Archive path
         "*",                       # Files to archive (wildcard unquoted)
-        "-r",                      # Recursive
-        "-x[r]!$ArchiveName",      # Exclude the archive itself
-        "-x[r]!encrypt_files.bat", # Exclude batch script
-        "-x[r]!encrypt_files.ps1", # Exclude PowerShell script
-        "-x[r]!7z.exe",            # Exclude 7z executable
-        "-x[r]!7z2501-x64.msi",    # Exclude MSI installer
-        "-x[r]!7z2501-x64.exe",    # Exclude x64 EXE installer
-        "-x[r]!7z2501-arm64.exe"   # Exclude ARM64 EXE installer
+        "-r"                       # Recursive - NO EXCLUSIONS (simpler, avoids syntax issues)
     )
 
     if ($DebugMode) {
