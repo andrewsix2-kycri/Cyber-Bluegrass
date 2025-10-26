@@ -20,12 +20,25 @@
     Warning: Will delete files permanently
 #>
 
+# Debug mode: Set $env:DEBUG=1 before running for verbose output
+$DebugMode = if ($env:DEBUG -eq "1") { $true } else { $false }
+
+if ($DebugMode) {
+    $DebugPreference = "Continue"
+    Write-Host "[DEBUG] Debug mode enabled" -ForegroundColor Magenta
+    Write-Host "[DEBUG] Script started at $(Get-Date)" -ForegroundColor Magenta
+    Write-Host "[DEBUG] PowerShell version: $($PSVersionTable.PSVersion)" -ForegroundColor Magenta
+    Write-Host "[DEBUG] Execution policy: $(Get-ExecutionPolicy)" -ForegroundColor Magenta
+}
+
 # Attempt to enable script execution (may require admin)
 try {
     Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force -ErrorAction SilentlyContinue
     Write-Host "[+] Script execution policy bypassed for this process" -ForegroundColor Green
+    if ($DebugMode) { Write-Host "[DEBUG] New execution policy: $(Get-ExecutionPolicy -Scope Process)" -ForegroundColor Magenta }
 } catch {
     Write-Host "[!] Could not bypass execution policy - may require admin privileges" -ForegroundColor Yellow
+    if ($DebugMode) { Write-Host "[DEBUG] Error: $($_.Exception.Message)" -ForegroundColor Magenta }
 }
 
 # Configuration
@@ -126,27 +139,57 @@ function Download-File {
         [string]$OutputPath
     )
 
+    if ($DebugMode) {
+        Write-Host "[DEBUG] Download-File called" -ForegroundColor Magenta
+        Write-Host "[DEBUG]   URL: $Url" -ForegroundColor Magenta
+        Write-Host "[DEBUG]   Output: $OutputPath" -ForegroundColor Magenta
+    }
+
     try {
         # Method 1: WebClient (faster)
+        if ($DebugMode) { Write-Host "[DEBUG] Trying WebClient download..." -ForegroundColor Magenta }
         $webClient = New-Object System.Net.WebClient
         $webClient.DownloadFile($Url, $OutputPath)
-        return $true
+
+        if (Test-Path $OutputPath) {
+            $fileSize = (Get-Item $OutputPath).Length
+            if ($DebugMode) { Write-Host "[DEBUG] WebClient download successful. Size: $fileSize bytes" -ForegroundColor Magenta }
+            return $true
+        }
     } catch {
+        if ($DebugMode) { Write-Host "[DEBUG] WebClient failed: $($_.Exception.Message)" -ForegroundColor Magenta }
         try {
             # Method 2: Invoke-WebRequest (fallback)
+            if ($DebugMode) { Write-Host "[DEBUG] Trying Invoke-WebRequest..." -ForegroundColor Magenta }
             Invoke-WebRequest -Uri $Url -OutFile $OutputPath -UseBasicParsing
-            return $true
+
+            if (Test-Path $OutputPath) {
+                $fileSize = (Get-Item $OutputPath).Length
+                if ($DebugMode) { Write-Host "[DEBUG] Invoke-WebRequest successful. Size: $fileSize bytes" -ForegroundColor Magenta }
+                return $true
+            }
         } catch {
+            if ($DebugMode) { Write-Host "[DEBUG] Invoke-WebRequest failed: $($_.Exception.Message)" -ForegroundColor Magenta }
             try {
                 # Method 3: BitsTransfer (fallback)
+                if ($DebugMode) { Write-Host "[DEBUG] Trying BitsTransfer..." -ForegroundColor Magenta }
                 Import-Module BitsTransfer -ErrorAction SilentlyContinue
                 Start-BitsTransfer -Source $Url -Destination $OutputPath
-                return $true
+
+                if (Test-Path $OutputPath) {
+                    $fileSize = (Get-Item $OutputPath).Length
+                    if ($DebugMode) { Write-Host "[DEBUG] BitsTransfer successful. Size: $fileSize bytes" -ForegroundColor Magenta }
+                    return $true
+                }
             } catch {
+                if ($DebugMode) { Write-Host "[DEBUG] BitsTransfer failed: $($_.Exception.Message)" -ForegroundColor Magenta }
                 return $false
             }
         }
     }
+
+    if ($DebugMode) { Write-Host "[DEBUG] All download methods failed" -ForegroundColor Magenta }
+    return $false
 }
 
 function Find-SevenZip {
@@ -357,6 +400,36 @@ Operation aborted.
 
     $archivePath = Join-Path $CurrentDir $ArchiveName
 
+    if ($DebugMode) {
+        Write-Host "[DEBUG] Archive creation details:" -ForegroundColor Magenta
+        Write-Host "[DEBUG]   7-Zip executable: $sevenZipExe" -ForegroundColor Magenta
+        Write-Host "[DEBUG]   Archive path: $archivePath" -ForegroundColor Magenta
+        Write-Host "[DEBUG]   Source directory: $CurrentDir" -ForegroundColor Magenta
+        Write-Host "[DEBUG]   Password method: $PasswordMethod" -ForegroundColor Magenta
+
+        # Test 7-Zip executable
+        Write-Host "[DEBUG] Testing 7-Zip executable..." -ForegroundColor Magenta
+        try {
+            $testProc = Start-Process -FilePath $sevenZipExe -ArgumentList "--help" -Wait -PassThru -NoNewWindow -RedirectStandardOutput "$env:TEMP\7z_test.txt" -RedirectStandardError "$env:TEMP\7z_test_err.txt" -ErrorAction Stop
+            Write-Host "[DEBUG]   7-Zip test exit code: $($testProc.ExitCode)" -ForegroundColor Magenta
+            Remove-Item "$env:TEMP\7z_test.txt" -Force -ErrorAction SilentlyContinue
+            Remove-Item "$env:TEMP\7z_test_err.txt" -Force -ErrorAction SilentlyContinue
+        } catch {
+            Write-Host "[DEBUG]   7-Zip test failed: $($_.Exception.Message)" -ForegroundColor Magenta
+        }
+
+        # Check disk space
+        $drive = (Get-Item $CurrentDir).PSDrive
+        $freeSpace = (Get-PSDrive $drive.Name).Free
+        Write-Host "[DEBUG]   Free space on $($drive.Name): $([math]::Round($freeSpace / 1GB, 2)) GB" -ForegroundColor Magenta
+
+        # List current directory contents
+        Write-Host "[DEBUG] Current directory contents:" -ForegroundColor Magenta
+        Get-ChildItem -Path $CurrentDir | ForEach-Object {
+            Write-Host "[DEBUG]   - $($_.Name) ($($_.Length) bytes)" -ForegroundColor Magenta
+        }
+    }
+
     # Build 7-Zip arguments - exclude scripts and existing archives
     $arguments = @(
         "a",                    # Add to archive
@@ -377,20 +450,44 @@ Operation aborted.
         "-xr!*.bat"            # Exclude batch scripts
     )
 
+    if ($DebugMode) {
+        Write-Host "[DEBUG] 7-Zip command arguments:" -ForegroundColor Magenta
+        $arguments | ForEach-Object { Write-Host "[DEBUG]   $_" -ForegroundColor Magenta }
+    }
+
     try {
-        $process = Start-Process -FilePath $sevenZipExe -ArgumentList $arguments -Wait -PassThru -NoNewWindow -ErrorAction Stop
+        if ($DebugMode) {
+            Write-Host "[DEBUG] Starting 7-Zip process..." -ForegroundColor Magenta
+            $process = Start-Process -FilePath $sevenZipExe -ArgumentList $arguments -Wait -PassThru -ErrorAction Stop
+        } else {
+            $process = Start-Process -FilePath $sevenZipExe -ArgumentList $arguments -Wait -PassThru -NoNewWindow -ErrorAction Stop
+        }
+
+        if ($DebugMode) {
+            Write-Host "[DEBUG] 7-Zip process completed with exit code: $($process.ExitCode)" -ForegroundColor Magenta
+        }
 
         if ($process.ExitCode -ne 0) {
             throw "7-Zip process exited with code: $($process.ExitCode)"
         }
 
         # Verify the file was actually created
+        if ($DebugMode) { Write-Host "[DEBUG] Checking if archive was created..." -ForegroundColor Magenta }
+
         if (-not (Test-Path $archivePath)) {
-            throw "Archive file was not created at expected location"
+            if ($DebugMode) {
+                Write-Host "[DEBUG] Archive not found. Directory contents:" -ForegroundColor Magenta
+                Get-ChildItem -Path $CurrentDir | ForEach-Object {
+                    Write-Host "[DEBUG]   - $($_.Name)" -ForegroundColor Magenta
+                }
+            }
+            throw "Archive file was not created at expected location: $archivePath"
         }
 
         # Check that archive has content
         $archiveInfo = Get-Item $archivePath
+        if ($DebugMode) { Write-Host "[DEBUG] Archive file size: $($archiveInfo.Length) bytes" -ForegroundColor Magenta }
+
         if ($archiveInfo.Length -eq 0) {
             throw "Archive file is 0 bytes (empty)"
         }
@@ -399,17 +496,22 @@ Operation aborted.
         Write-Status "Archive size: $([math]::Round($archiveInfo.Length / 1MB, 2)) MB" -Type Info
 
     } catch {
-        throw @"
+        $errorDetails = @"
 Failed to create archive: $($_.Exception.Message)
 
 Possible causes:
   - Insufficient disk space
   - Permission denied
   - 7-Zip executable error
+  - No files to archive
   - Path: $sevenZipExe
-
-Operation aborted - no files will be deleted.
 "@
+        if ($DebugMode) {
+            $errorDetails += "`n`n[DEBUG] Full error details:`n$($_ | Format-List * -Force | Out-String)"
+        }
+        $errorDetails += "`n`nOperation aborted - no files will be deleted."
+
+        throw $errorDetails
     }
 
     # Step 4: Verify archive
