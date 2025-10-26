@@ -523,33 +523,16 @@ if "%DEBUG%"=="1" (
 
 set "ARCHIVE_RESULT=%ERRORLEVEL%"
 if "%DEBUG%"=="1" echo ^[DEBUG^] 7-Zip archive creation exit code: %ARCHIVE_RESULT%
-echo.
-echo ^[+^] Archive creation completed with exit code: %ARCHIVE_RESULT%
 
 REM 7-Zip exit codes: 0=success, 1=warning(non-fatal), 2=fatal error, 7=command line error, 8=not enough memory, 255=user stopped
-if "%DEBUG%"=="1" echo ^[DEBUG^] Checking if ARCHIVE_RESULT ^(%ARCHIVE_RESULT%^) equals 2...
-if %ARCHIVE_RESULT% EQU 2 (
-    if "%DEBUG%"=="1" echo ^[DEBUG^] Result IS 2, entering error block...
-    echo ^[-^] Failed to create archive - Fatal Error ^(Error Level: 2^)
-    echo ^[!^] This usually means no files matched the pattern or permission denied
-    echo ^[!^] Path used: "%SEVEN_ZIP_EXE%"
-    echo.
-    if "%DEBUG%"=="1" (
-        echo ^[DEBUG^] Listing files that would be archived:
-        dir /b /s "%CD%" | findstr /v /i "%ARCHIVE_NAME%" | findstr /v /i ".7z$" | findstr /v /i ".bat$" | findstr /v /i ".ps1$"
-    )
-    echo ^[-^] Operation aborted - no files will be deleted
-    pause
-    exit /b 1
-)
-
-if %ARCHIVE_RESULT% GTR 2 (
+REM SUCCESS is 0 or 1, anything else is FAILURE
+if %ARCHIVE_RESULT% GTR 1 (
     echo.
     echo ^[-^] Failed to create archive - Error Level: %ARCHIVE_RESULT%
     echo ^[!^] Possible causes:
-    echo ^[!^]   - Error code 7: Command line error
-    echo ^[!^]   - Error code 8: Not enough memory
-    echo ^[!^]   - Other: System error
+    if %ARCHIVE_RESULT% EQU 2 echo ^[!^]   - Error code 2: Fatal error ^(no files matched or permission denied^)
+    if %ARCHIVE_RESULT% EQU 7 echo ^[!^]   - Error code 7: Command line error
+    if %ARCHIVE_RESULT% EQU 8 echo ^[!^]   - Error code 8: Not enough memory
     echo.
     if "%DEBUG%"=="1" (
         echo ^[DEBUG^] Attempting to run 7-Zip help to verify it works...
@@ -562,8 +545,10 @@ if %ARCHIVE_RESULT% GTR 2 (
 )
 
 REM Exit code 0 or 1 is acceptable (1 = warnings but success)
+echo.
+echo ^[+^] Archive creation successful ^(exit code: %ARCHIVE_RESULT%^)
 if %ARCHIVE_RESULT% EQU 1 (
-    echo [!] Warning: Archive created with warnings (non-fatal)
+    echo ^[!^] Warning: Archive created with warnings ^(non-fatal^)
 )
 
 if "%DEBUG%"=="1" echo ^[DEBUG^] Checking if archive file was created...
