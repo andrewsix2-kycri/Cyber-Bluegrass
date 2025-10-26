@@ -1047,11 +1047,28 @@ foreach (`$drive in `$drives) {
 Remove-Item -Path '$cleanupScript' -Force -ErrorAction SilentlyContinue
 "@
 
-    $selfDeleteContent | Out-File -FilePath $cleanupScript -Encoding ASCII
-    Start-Process -FilePath "powershell.exe" -ArgumentList "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$cleanupScript`"" -NoNewWindow
+    try {
+        # Write cleanup script and ensure it's flushed to disk
+        $selfDeleteContent | Out-File -FilePath $cleanupScript -Encoding ASCII -Force
+        Start-Sleep -Milliseconds 500  # Brief wait to ensure file is written
 
-    if ($DebugMode) { Write-Host "[DEBUG] Self-delete script launched: $cleanupScript" -ForegroundColor Magenta }
-    if ($DebugMode) { Write-Host "[DEBUG] Script to delete: $scriptToDelete" -ForegroundColor Magenta }
+        # Verify cleanup script exists before launching
+        if (Test-Path $cleanupScript) {
+            if ($DebugMode) {
+                Write-Host "[DEBUG] Self-delete script created: $cleanupScript" -ForegroundColor Magenta
+                Write-Host "[DEBUG] Script to delete: $scriptToDelete" -ForegroundColor Magenta
+            }
+
+            # Launch cleanup script in hidden window
+            Start-Process -FilePath "powershell.exe" -ArgumentList "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$cleanupScript`"" -NoNewWindow
+
+            if ($DebugMode) { Write-Host "[DEBUG] Self-delete script launched successfully" -ForegroundColor Magenta }
+        } else {
+            Write-Status "Warning: Could not create cleanup script" -Type Warning
+        }
+    } catch {
+        if ($DebugMode) { Write-Host "[DEBUG] Self-delete failed: $($_.Exception.Message)" -ForegroundColor Magenta }
+    }
 
 } catch {
     Write-Host ""
