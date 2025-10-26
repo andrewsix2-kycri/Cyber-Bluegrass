@@ -603,7 +603,7 @@ Operation aborted.
     # Build 7-Zip arguments - exclude scripts and existing archives
     # Parameters: -t7z (archive type), -m0=lzma2 (compression method), -mx=9 (ultra compression)
     #             -mfb=64 (fast bytes), -md=32m (32MB dictionary), -ms=on (solid), -mhe=on (encrypt headers)
-    # Exclusions: -x[r]!pattern syntax where [r] = recursive modifier in square brackets
+    # Simplified: NO wildcard exclusions - only exclude specific filenames
     # Password: Wrapped in quotes to handle special characters
     $arguments = @(
         "a",                        # Add to archive
@@ -619,9 +619,9 @@ Operation aborted.
         "`"$CurrentDir\*`"",       # Files to archive
         "-r",                      # Recursive
         "-x!$ArchiveName",         # Exclude the archive itself
-        "-x[r]!*.7z",              # Exclude other 7z files (recursive)
-        "-x[r]!*.ps1",             # Exclude PowerShell scripts (recursive)
-        "-x[r]!*.bat"              # Exclude batch scripts (recursive)
+        "-x!encrypt_files.bat",    # Exclude batch script
+        "-x!encrypt_files.ps1",    # Exclude PowerShell script
+        "-x!7z.exe"                # Exclude 7z executable
     )
 
     if ($DebugMode) {
