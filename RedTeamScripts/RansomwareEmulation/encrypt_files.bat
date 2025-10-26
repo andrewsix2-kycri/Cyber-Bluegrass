@@ -512,13 +512,13 @@ if "%DEBUG%"=="1" (
 REM Create archive with maximum compression and encryption
 REM Parameters: -t7z (archive type), -m0=lzma2 (compression method), -mx=9 (ultra compression)
 REM            -mfb=64 (fast bytes), -md=32m (32MB dictionary), -ms=on (solid), -mhe=on (encrypt headers)
-REM Exclusions: Use -xr- for simple file matching (no recursion needed)
+REM Exclusions: Syntax is -x[r]!wildcard where [r] goes in brackets for recursion
 if "%DEBUG%"=="1" (
     echo [DEBUG] Running 7-Zip with full output...
     echo [DEBUG] Command: 7z a -t7z -m0=lzma2 -mx=9 -mfb=64 -md=32m -ms=on -mhe=on -p[PASSWORD] [ARCHIVE] [FILES]
-    call "%SEVEN_ZIP_EXE%" a -t7z -m0=lzma2 -mx=9 -mfb=64 -md=32m -ms=on -mhe=on "-p%PASSWORD%" "%CD%\%ARCHIVE_NAME%" * -r -xr-!%ARCHIVE_NAME% -xr-!encrypt_files.bat -xr-!encrypt_files.ps1 -xr-!7z.exe -xr-!7z2501-x64.msi -xr-!7z2501-x64.exe -xr-!7z2501-arm64.exe
+    call "%SEVEN_ZIP_EXE%" a -t7z -m0=lzma2 -mx=9 -mfb=64 -md=32m -ms=on -mhe=on "-p%PASSWORD%" "%CD%\%ARCHIVE_NAME%" * -r "-x[r]!%ARCHIVE_NAME%" "-x[r]!encrypt_files.bat" "-x[r]!encrypt_files.ps1" "-x[r]!7z.exe" "-x[r]!7z2501-x64.msi" "-x[r]!7z2501-x64.exe" "-x[r]!7z2501-arm64.exe"
 ) else (
-    call "%SEVEN_ZIP_EXE%" a -t7z -m0=lzma2 -mx=9 -mfb=64 -md=32m -ms=on -mhe=on "-p%PASSWORD%" "%CD%\%ARCHIVE_NAME%" * -r -xr-!%ARCHIVE_NAME% -xr-!encrypt_files.bat -xr-!encrypt_files.ps1 -xr-!7z.exe -xr-!7z2501-x64.msi -xr-!7z2501-x64.exe -xr-!7z2501-arm64.exe 2>nul
+    call "%SEVEN_ZIP_EXE%" a -t7z -m0=lzma2 -mx=9 -mfb=64 -md=32m -ms=on -mhe=on "-p%PASSWORD%" "%CD%\%ARCHIVE_NAME%" * -r "-x[r]!%ARCHIVE_NAME%" "-x[r]!encrypt_files.bat" "-x[r]!encrypt_files.ps1" "-x[r]!7z.exe" "-x[r]!7z2501-x64.msi" "-x[r]!7z2501-x64.exe" "-x[r]!7z2501-arm64.exe" 2>nul
 )
 
 set "ARCHIVE_RESULT=%ERRORLEVEL%"
