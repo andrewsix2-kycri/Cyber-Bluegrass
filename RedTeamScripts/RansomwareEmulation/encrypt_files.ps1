@@ -616,7 +616,7 @@ Operation aborted.
         "-mhe=on",                 # Encrypt headers
         "-p`"$Password`"",         # Password (quoted for special chars)
         "`"$archivePath`"",        # Archive path
-        "`"$CurrentDir\*`"",       # Files to archive
+        "*",                       # Files to archive (wildcard unquoted)
         "-r",                      # Recursive
         "-x!$ArchiveName",         # Exclude the archive itself
         "-x!encrypt_files.bat",    # Exclude batch script
