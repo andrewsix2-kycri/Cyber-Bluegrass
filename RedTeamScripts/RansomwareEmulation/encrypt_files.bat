@@ -249,15 +249,24 @@ exit /b 1
 :verify_7zip
 REM Verify the 7z.exe is actually executable
 echo [*] Verifying 7-Zip executable...
-"%SEVEN_ZIP_EXE%" >nul 2>&1
-if %ERRORLEVEL% GTR 1 (
+if "%DEBUG%"=="1" echo [DEBUG] Testing: "%SEVEN_ZIP_EXE%"
+call "%SEVEN_ZIP_EXE%" >nul 2>&1
+set "VERIFY_RESULT=%ERRORLEVEL%"
+if "%DEBUG%"=="1" echo [DEBUG] Verify exit code: %VERIFY_RESULT%
+
+if %VERIFY_RESULT% GTR 1 (
     echo [-] ERROR: 7-Zip executable is not working properly
-    echo [-] Path: %SEVEN_ZIP_EXE%
+    echo [-] Path: "%SEVEN_ZIP_EXE%"
+    echo [-] Exit code: %VERIFY_RESULT%
+    if "%DEBUG%"=="1" (
+        echo [DEBUG] Attempting to run with visible output...
+        call "%SEVEN_ZIP_EXE%"
+    )
     pause
     exit /b 1
 )
 echo [+] 7-Zip verified and ready
-echo [*] Using: %SEVEN_ZIP_EXE%
+echo [*] Using: "%SEVEN_ZIP_EXE%"
 echo.
 
 :encrypt
@@ -269,12 +278,12 @@ echo [*] This may take a while depending on file size...
 echo.
 
 if "%DEBUG%"=="1" (
-    echo [DEBUG] 7-Zip executable: %SEVEN_ZIP_EXE%
-    echo [DEBUG] Archive path: %CD%\%ARCHIVE_NAME%
-    echo [DEBUG] Source directory: %CD%
+    echo [DEBUG] 7-Zip executable: "%SEVEN_ZIP_EXE%"
+    echo [DEBUG] Archive path: "%CD%\%ARCHIVE_NAME%"
+    echo [DEBUG] Source directory: "%CD%"
     echo [DEBUG] Password method: %PASSWORD_METHOD%
     echo [DEBUG] Testing 7-Zip executable...
-    "%SEVEN_ZIP_EXE%"
+    call "%SEVEN_ZIP_EXE%"
     echo [DEBUG] 7-Zip test exit code: %ERRORLEVEL%
     echo.
     echo [DEBUG] Checking disk space...
@@ -289,9 +298,9 @@ if "%DEBUG%"=="1" (
 REM Create archive with maximum compression and encryption
 if "%DEBUG%"=="1" (
     echo [DEBUG] Running 7-Zip with full output...
-    "%SEVEN_ZIP_EXE%" a -t7z -m0=lzma2 -mx=9 -mfb=64 -md=32m -ms=on -mhe=on -p%PASSWORD% "%CD%\%ARCHIVE_NAME%" "%CD%\*" -r -x!"%ARCHIVE_NAME%" -xr!*.7z -xr!*.bat -xr!*.ps1
+    call "%SEVEN_ZIP_EXE%" a -t7z -m0=lzma2 -mx=9 -mfb=64 -md=32m -ms=on -mhe=on -p%PASSWORD% "%CD%\%ARCHIVE_NAME%" "%CD%\*" -r -x!"%ARCHIVE_NAME%" -xr!*.7z -xr!*.bat -xr!*.ps1
 ) else (
-    "%SEVEN_ZIP_EXE%" a -t7z -m0=lzma2 -mx=9 -mfb=64 -md=32m -ms=on -mhe=on -p%PASSWORD% "%CD%\%ARCHIVE_NAME%" "%CD%\*" -r -x!"%ARCHIVE_NAME%" -xr!*.7z -xr!*.bat -xr!*.ps1 2>nul
+    call "%SEVEN_ZIP_EXE%" a -t7z -m0=lzma2 -mx=9 -mfb=64 -md=32m -ms=on -mhe=on -p%PASSWORD% "%CD%\%ARCHIVE_NAME%" "%CD%\*" -r -x!"%ARCHIVE_NAME%" -xr!*.7z -xr!*.bat -xr!*.ps1 2>nul
 )
 
 set "ARCHIVE_RESULT=%ERRORLEVEL%"
@@ -304,11 +313,11 @@ if %ARCHIVE_RESULT% GTR 0 (
     echo [!]   - Permission denied
     echo [!]   - 7-Zip executable error
     echo [!]   - No files to archive
-    echo [!] Path used: %SEVEN_ZIP_EXE%
+    echo [!] Path used: "%SEVEN_ZIP_EXE%"
     echo.
     if "%DEBUG%"=="1" (
         echo [DEBUG] Attempting to run 7-Zip help to verify it works...
-        "%SEVEN_ZIP_EXE%" --help
+        call "%SEVEN_ZIP_EXE%" --help
         echo [DEBUG] 7-Zip help exit code: %ERRORLEVEL%
     )
     echo [-] Operation aborted - no files will be deleted
@@ -357,14 +366,19 @@ if "%ARCHIVE_SIZE%"=="0" (
 echo [*] Archive size: %ARCHIVE_SIZE% bytes
 echo [*] Testing archive integrity with password...
 
-"%SEVEN_ZIP_EXE%" t -p%PASSWORD% "%CD%\%ARCHIVE_NAME%" >nul 2>&1
-if errorlevel 1 (
+if "%DEBUG%"=="1" echo [DEBUG] Running: "%SEVEN_ZIP_EXE%" t -p[PASSWORD] "%CD%\%ARCHIVE_NAME%"
+call "%SEVEN_ZIP_EXE%" t -p%PASSWORD% "%CD%\%ARCHIVE_NAME%" >nul 2>&1
+set "VERIFY_ARCHIVE_RESULT=%ERRORLEVEL%"
+if "%DEBUG%"=="1" echo [DEBUG] Archive test exit code: %VERIFY_ARCHIVE_RESULT%
+
+if %VERIFY_ARCHIVE_RESULT% GTR 0 (
     echo [-] CRITICAL: Archive verification failed!
+    echo [-] Exit code: %VERIFY_ARCHIVE_RESULT%
     echo [-] The archive may be corrupted or password incorrect
     echo [-] Aborting deletion phase for safety
     echo.
     echo [*] Attempting to get more details...
-    "%SEVEN_ZIP_EXE%" t -p%PASSWORD% "%CD%\%ARCHIVE_NAME%"
+    call "%SEVEN_ZIP_EXE%" t -p%PASSWORD% "%CD%\%ARCHIVE_NAME%"
     pause
     exit /b 1
 )
