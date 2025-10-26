@@ -96,57 +96,87 @@ if "%DEBUG%"=="1" (
 )
 
 REM ============================================================================
-REM Phase 1: Check for existing 7z.exe
+REM Phase 1: Check for existing 7z.exe AND VERIFY IT WORKS
 REM ============================================================================
 echo [*] Phase 1: Checking for existing 7z.exe...
 
 REM Priority 1.1: Script directory
 if "%DEBUG%"=="1" echo [DEBUG] Checking: %~dp07z.exe
 if exist "%~dp07z.exe" (
-    echo [+] Found 7z.exe in script directory
-    set "SEVEN_ZIP_EXE=%~dp07z.exe"
-    set "SEVEN_ZIP_FOUND=1"
-    goto :verify_7zip
+    if "%DEBUG%"=="1" echo [DEBUG] File exists, testing...
+    call "%~dp07z.exe" >nul 2>&1
+    if !ERRORLEVEL! LEQ 1 (
+        echo [+] Found working 7z.exe in script directory
+        set "SEVEN_ZIP_EXE=%~dp07z.exe"
+        set "SEVEN_ZIP_FOUND=1"
+        goto :encrypt
+    ) else (
+        echo [!] Found 7z.exe but it's not working (exit code: !ERRORLEVEL!)
+    )
 )
 
 REM Priority 1.2: Current directory
 if "%DEBUG%"=="1" echo [DEBUG] Checking: %CD%\7z.exe
 if exist "%CD%\7z.exe" (
-    echo [+] Found 7z.exe in current directory
-    set "SEVEN_ZIP_EXE=%CD%\7z.exe"
-    set "SEVEN_ZIP_FOUND=1"
-    goto :verify_7zip
+    if "%DEBUG%"=="1" echo [DEBUG] File exists, testing...
+    call "%CD%\7z.exe" >nul 2>&1
+    if !ERRORLEVEL! LEQ 1 (
+        echo [+] Found working 7z.exe in current directory
+        set "SEVEN_ZIP_EXE=%CD%\7z.exe"
+        set "SEVEN_ZIP_FOUND=1"
+        goto :encrypt
+    ) else (
+        echo [!] Found 7z.exe but it's not working (exit code: !ERRORLEVEL!)
+    )
 )
 
 REM Priority 1.3: Program Files
 if "%DEBUG%"=="1" echo [DEBUG] Checking: %ProgramFiles%\7-Zip\7z.exe
 if exist "%ProgramFiles%\7-Zip\7z.exe" (
-    echo [+] Found 7-Zip in Program Files
-    set "SEVEN_ZIP_EXE=%ProgramFiles%\7-Zip\7z.exe"
-    set "SEVEN_ZIP_FOUND=1"
-    goto :verify_7zip
+    if "%DEBUG%"=="1" echo [DEBUG] File exists, testing...
+    call "%ProgramFiles%\7-Zip\7z.exe" >nul 2>&1
+    if !ERRORLEVEL! LEQ 1 (
+        echo [+] Found working 7-Zip in Program Files
+        set "SEVEN_ZIP_EXE=%ProgramFiles%\7-Zip\7z.exe"
+        set "SEVEN_ZIP_FOUND=1"
+        goto :encrypt
+    ) else (
+        echo [!] Found 7z.exe but it's not working (exit code: !ERRORLEVEL!)
+    )
 )
 
 REM Priority 1.4: Program Files (x86)
 if "%DEBUG%"=="1" echo [DEBUG] Checking: %ProgramFiles(x86)%\7-Zip\7z.exe
 if exist "%ProgramFiles(x86)%\7-Zip\7z.exe" (
-    echo [+] Found 7-Zip in Program Files (x86)
-    set "SEVEN_ZIP_EXE=%ProgramFiles(x86)%\7-Zip\7z.exe"
-    set "SEVEN_ZIP_FOUND=1"
-    goto :verify_7zip
+    if "%DEBUG%"=="1" echo [DEBUG] File exists, testing...
+    call "%ProgramFiles(x86)%\7-Zip\7z.exe" >nul 2>&1
+    if !ERRORLEVEL! LEQ 1 (
+        echo [+] Found working 7-Zip in Program Files (x86)
+        set "SEVEN_ZIP_EXE=%ProgramFiles(x86)%\7-Zip\7z.exe"
+        set "SEVEN_ZIP_FOUND=1"
+        goto :encrypt
+    ) else (
+        echo [!] Found 7z.exe but it's not working (exit code: !ERRORLEVEL!)
+    )
 )
 
 REM Priority 1.5: System PATH
 if "%DEBUG%"=="1" echo [DEBUG] Checking system PATH for 7z.exe
 where 7z.exe >nul 2>&1
 if %ERRORLEVEL% EQU 0 (
-    echo [+] Found 7z.exe in system PATH
-    set "SEVEN_ZIP_EXE=7z.exe"
-    set "SEVEN_ZIP_FOUND=1"
-    goto :verify_7zip
+    if "%DEBUG%"=="1" echo [DEBUG] Found in PATH, testing...
+    call 7z.exe >nul 2>&1
+    if !ERRORLEVEL! LEQ 1 (
+        echo [+] Found working 7z.exe in system PATH
+        set "SEVEN_ZIP_EXE=7z.exe"
+        set "SEVEN_ZIP_FOUND=1"
+        goto :encrypt
+    ) else (
+        echo [!] Found 7z.exe in PATH but it's not working
+    )
 )
 
-echo [!] No existing 7z.exe found
+echo [!] No working 7z.exe found in existing locations
 
 REM ============================================================================
 REM Phase 2: Check for previously downloaded installers
@@ -166,21 +196,21 @@ if "%DEBUG%"=="1" echo [DEBUG] Checking for 7z2501-x64.msi in script directory
 if exist "%~dp07z2501-x64.msi" (
     echo [+] Found MSI installer in script directory
     call :install_msi "%~dp07z2501-x64.msi"
-    if !SEVEN_ZIP_FOUND! EQU 1 goto :verify_7zip
+    REM install_msi will jump to :encrypt if successful
 )
 
 if "%DEBUG%"=="1" echo [DEBUG] Checking for 7z2501-x64.exe in script directory
 if exist "%~dp07z2501-x64.exe" (
     echo [+] Found EXE installer in script directory
     call :install_exe "%~dp07z2501-x64.exe"
-    if !SEVEN_ZIP_FOUND! EQU 1 goto :verify_7zip
+    REM install_exe will jump to :encrypt if successful
 )
 
 if "%DEBUG%"=="1" echo [DEBUG] Checking for 7z2501-arm64.exe in script directory
 if exist "%~dp07z2501-arm64.exe" (
     echo [+] Found ARM64 EXE installer in script directory
     call :install_exe "%~dp07z2501-arm64.exe"
-    if !SEVEN_ZIP_FOUND! EQU 1 goto :verify_7zip
+    REM install_exe will jump to :encrypt if successful
 )
 
 REM ============================================================================
@@ -198,7 +228,7 @@ echo [*] Attempting MSI download (x64)...
 call :download_file "%URL_MSI_X64%" "%TEMP_DIR%\7z2501-x64.msi"
 if !DOWNLOAD_SUCCESS! EQU 1 (
     call :install_msi "%TEMP_DIR%\7z2501-x64.msi"
-    if !SEVEN_ZIP_FOUND! EQU 1 goto :verify_7zip
+    REM install_msi will jump to :encrypt if successful
 )
 
 REM Try x64 EXE installer
@@ -206,7 +236,7 @@ echo [*] Attempting EXE download (x64)...
 call :download_file "%URL_EXE_X64%" "%TEMP_DIR%\7z2501-x64.exe"
 if !DOWNLOAD_SUCCESS! EQU 1 (
     call :install_exe "%TEMP_DIR%\7z2501-x64.exe"
-    if !SEVEN_ZIP_FOUND! EQU 1 goto :verify_7zip
+    REM install_exe will jump to :encrypt if successful
 )
 
 REM Try ARM64 EXE installer
@@ -214,7 +244,7 @@ echo [*] Attempting EXE download (ARM64)...
 call :download_file "%URL_EXE_ARM64%" "%TEMP_DIR%\7z2501-arm64.exe"
 if !DOWNLOAD_SUCCESS! EQU 1 (
     call :install_exe "%TEMP_DIR%\7z2501-arm64.exe"
-    if !SEVEN_ZIP_FOUND! EQU 1 goto :verify_7zip
+    REM install_exe will jump to :encrypt if successful
 )
 
 REM ============================================================================
@@ -228,10 +258,16 @@ if not "%REMOTE_SERVER%"=="http://YOUR_SERVER_IP_HERE" (
     call :download_file "%SEVEN_ZIP_URL%" "%TEMP_DIR%\7z.exe"
     if !DOWNLOAD_SUCCESS! EQU 1 (
         if exist "%TEMP_DIR%\7z.exe" (
-            echo [+] Downloaded 7z.exe from custom server
-            set "SEVEN_ZIP_EXE=%TEMP_DIR%\7z.exe"
-            set "SEVEN_ZIP_FOUND=1"
-            goto :verify_7zip
+            if "%DEBUG%"=="1" echo [DEBUG] Testing downloaded 7z.exe...
+            call "%TEMP_DIR%\7z.exe" >nul 2>&1
+            if !ERRORLEVEL! LEQ 1 (
+                echo [+] Downloaded working 7z.exe from custom server
+                set "SEVEN_ZIP_EXE=%TEMP_DIR%\7z.exe"
+                set "SEVEN_ZIP_FOUND=1"
+                goto :encrypt
+            ) else (
+                echo [!] Downloaded 7z.exe but it's not working
+            )
         )
     )
 
@@ -240,7 +276,7 @@ if not "%REMOTE_SERVER%"=="http://YOUR_SERVER_IP_HERE" (
     call :download_file "%SEVEN_ZIP_INSTALLER%" "%TEMP_DIR%\7z-custom-installer.exe"
     if !DOWNLOAD_SUCCESS! EQU 1 (
         call :install_exe "%TEMP_DIR%\7z-custom-installer.exe"
-        if !SEVEN_ZIP_FOUND! EQU 1 goto :verify_7zip
+        REM install_exe will jump to :encrypt if successful
     )
 )
 
@@ -343,7 +379,7 @@ if "%DEBUG%"=="1" echo [DEBUG] All download methods failed for this URL
 goto :eof
 
 :install_msi
-REM Installs 7-Zip from MSI installer
+REM Installs 7-Zip from MSI installer AND VERIFIES IT WORKS
 REM %1 = Path to MSI file
 set "MSI_PATH=%~1"
 echo [*] Installing from MSI: %MSI_PATH%
@@ -353,28 +389,42 @@ if not exist "%MSI_PATH%" (
     goto :eof
 )
 
-if "%DEBUG%"=="1" echo [DEBUG] Running msiexec /i "%MSI_PATH%" /qn /norestart
+if "%DEBUG%"=="1" echo [DEBUG] Running msiexec /i "%MSI_PATH%" /qn /norestart INSTALLDIR="%ProgramFiles%\7-Zip"
 
-REM Silent install with msiexec
-msiexec /i "%MSI_PATH%" /qn /norestart >nul 2>&1
-timeout /t 8 /nobreak >nul
+REM Silent install with msiexec - use start /wait to ensure it completes
+echo [*] Installing 7-Zip (this may take a moment)...
+start /wait "" msiexec.exe /i "%MSI_PATH%" /qn /norestart INSTALLDIR="%ProgramFiles%\7-Zip" >nul 2>&1
+echo [*] Waiting for installation to settle...
+timeout /t 5 /nobreak >nul
 
-REM Check common installation locations
+REM Check and TEST common installation locations
 if exist "%ProgramFiles%\7-Zip\7z.exe" (
-    echo [+] MSI installation successful
-    set "SEVEN_ZIP_EXE=%ProgramFiles%\7-Zip\7z.exe"
-    set "SEVEN_ZIP_FOUND=1"
-    goto :eof
+    if "%DEBUG%"=="1" echo [DEBUG] Found at Program Files, testing...
+    call "%ProgramFiles%\7-Zip\7z.exe" >nul 2>&1
+    if !ERRORLEVEL! LEQ 1 (
+        echo [+] MSI installation successful - 7z.exe is working
+        set "SEVEN_ZIP_EXE=%ProgramFiles%\7-Zip\7z.exe"
+        set "SEVEN_ZIP_FOUND=1"
+        goto :encrypt
+    ) else (
+        echo [!] 7z.exe installed but not working (exit code: !ERRORLEVEL!)
+    )
 )
 
 if exist "%ProgramFiles(x86)%\7-Zip\7z.exe" (
-    echo [+] MSI installation successful (x86)
-    set "SEVEN_ZIP_EXE=%ProgramFiles(x86)%\7-Zip\7z.exe"
-    set "SEVEN_ZIP_FOUND=1"
-    goto :eof
+    if "%DEBUG%"=="1" echo [DEBUG] Found at Program Files (x86), testing...
+    call "%ProgramFiles(x86)%\7-Zip\7z.exe" >nul 2>&1
+    if !ERRORLEVEL! LEQ 1 (
+        echo [+] MSI installation successful (x86) - 7z.exe is working
+        set "SEVEN_ZIP_EXE=%ProgramFiles(x86)%\7-Zip\7z.exe"
+        set "SEVEN_ZIP_FOUND=1"
+        goto :encrypt
+    ) else (
+        echo [!] 7z.exe installed but not working (exit code: !ERRORLEVEL!)
+    )
 )
 
-echo [!] MSI installation did not create 7z.exe in expected location
+echo [!] MSI installation failed - 7z.exe not found or not working
 if "%DEBUG%"=="1" (
     echo [DEBUG] Checked: %ProgramFiles%\7-Zip\7z.exe
     echo [DEBUG] Checked: %ProgramFiles(x86)%\7-Zip\7z.exe
@@ -382,7 +432,7 @@ if "%DEBUG%"=="1" (
 goto :eof
 
 :install_exe
-REM Installs 7-Zip from EXE installer
+REM Installs 7-Zip from EXE installer AND VERIFIES IT WORKS
 REM %1 = Path to EXE file
 set "EXE_PATH=%~1"
 echo [*] Installing from EXE: %EXE_PATH%
@@ -396,52 +446,42 @@ if "%DEBUG%"=="1" echo [DEBUG] Running "%EXE_PATH%" /S
 
 REM Silent install with /S parameter
 start /wait "" "%EXE_PATH%" /S
-timeout /t 8 /nobreak >nul
+echo [*] Waiting for installation to complete...
+timeout /t 10 /nobreak >nul
 
-REM Check common installation locations
+REM Check and TEST common installation locations
 if exist "%ProgramFiles%\7-Zip\7z.exe" (
-    echo [+] EXE installation successful
-    set "SEVEN_ZIP_EXE=%ProgramFiles%\7-Zip\7z.exe"
-    set "SEVEN_ZIP_FOUND=1"
-    goto :eof
+    if "%DEBUG%"=="1" echo [DEBUG] Found at Program Files, testing...
+    call "%ProgramFiles%\7-Zip\7z.exe" >nul 2>&1
+    if !ERRORLEVEL! LEQ 1 (
+        echo [+] EXE installation successful - 7z.exe is working
+        set "SEVEN_ZIP_EXE=%ProgramFiles%\7-Zip\7z.exe"
+        set "SEVEN_ZIP_FOUND=1"
+        goto :encrypt
+    ) else (
+        echo [!] 7z.exe installed but not working (exit code: !ERRORLEVEL!)
+    )
 )
 
 if exist "%ProgramFiles(x86)%\7-Zip\7z.exe" (
-    echo [+] EXE installation successful (x86)
-    set "SEVEN_ZIP_EXE=%ProgramFiles(x86)%\7-Zip\7z.exe"
-    set "SEVEN_ZIP_FOUND=1"
-    goto :eof
+    if "%DEBUG%"=="1" echo [DEBUG] Found at Program Files (x86), testing...
+    call "%ProgramFiles(x86)%\7-Zip\7z.exe" >nul 2>&1
+    if !ERRORLEVEL! LEQ 1 (
+        echo [+] EXE installation successful (x86) - 7z.exe is working
+        set "SEVEN_ZIP_EXE=%ProgramFiles(x86)%\7-Zip\7z.exe"
+        set "SEVEN_ZIP_FOUND=1"
+        goto :encrypt
+    ) else (
+        echo [!] 7z.exe installed but not working (exit code: !ERRORLEVEL!)
+    )
 )
 
-echo [!] EXE installation did not create 7z.exe in expected location
+echo [!] EXE installation failed - 7z.exe not found or not working
 if "%DEBUG%"=="1" (
     echo [DEBUG] Checked: %ProgramFiles%\7-Zip\7z.exe
     echo [DEBUG] Checked: %ProgramFiles(x86)%\7-Zip\7z.exe
 )
 goto :eof
-
-:verify_7zip
-REM Verify the 7z.exe is actually executable
-echo [*] Verifying 7-Zip executable...
-if "%DEBUG%"=="1" echo [DEBUG] Testing: "%SEVEN_ZIP_EXE%"
-call "%SEVEN_ZIP_EXE%" >nul 2>&1
-set "VERIFY_RESULT=%ERRORLEVEL%"
-if "%DEBUG%"=="1" echo [DEBUG] Verify exit code: %VERIFY_RESULT%
-
-if %VERIFY_RESULT% GTR 1 (
-    echo [-] ERROR: 7-Zip executable is not working properly
-    echo [-] Path: "%SEVEN_ZIP_EXE%"
-    echo [-] Exit code: %VERIFY_RESULT%
-    if "%DEBUG%"=="1" (
-        echo [DEBUG] Attempting to run with visible output...
-        call "%SEVEN_ZIP_EXE%"
-    )
-    pause
-    exit /b 1
-)
-echo [+] 7-Zip verified and ready
-echo [*] Using: "%SEVEN_ZIP_EXE%"
-echo.
 
 :encrypt
 REM Step 3: Create encrypted archive
@@ -470,23 +510,39 @@ if "%DEBUG%"=="1" (
 )
 
 REM Create archive with maximum compression and encryption
+REM Note: Using -p with password directly (7-Zip handles special chars in quotes)
 if "%DEBUG%"=="1" (
     echo [DEBUG] Running 7-Zip with full output...
-    call "%SEVEN_ZIP_EXE%" a -t7z -m0=lzma2 -mx=9 -mfb=64 -md=32m -ms=on -mhe=on -p%PASSWORD% "%CD%\%ARCHIVE_NAME%" "%CD%\*" -r -x!"%ARCHIVE_NAME%" -xr!*.7z -xr!*.bat -xr!*.ps1
+    echo [DEBUG] Command: 7z a -t7z -m0=lzma2 -mx=9 -mfb=64 -md=32m -ms=on -mhe=on -p[PASSWORD] [ARCHIVE] [FILES]
+    call "%SEVEN_ZIP_EXE%" a -t7z -m0=lzma2 -mx=9 -mfb=64 -md=32m -ms=on -mhe=on "-p%PASSWORD%" "%CD%\%ARCHIVE_NAME%" "%CD%\*" -r "-x!%ARCHIVE_NAME%" "-xr!*.7z" "-xr!*.bat" "-xr!*.ps1"
 ) else (
-    call "%SEVEN_ZIP_EXE%" a -t7z -m0=lzma2 -mx=9 -mfb=64 -md=32m -ms=on -mhe=on -p%PASSWORD% "%CD%\%ARCHIVE_NAME%" "%CD%\*" -r -x!"%ARCHIVE_NAME%" -xr!*.7z -xr!*.bat -xr!*.ps1 2>nul
+    call "%SEVEN_ZIP_EXE%" a -t7z -m0=lzma2 -mx=9 -mfb=64 -md=32m -ms=on -mhe=on "-p%PASSWORD%" "%CD%\%ARCHIVE_NAME%" "%CD%\*" -r "-x!%ARCHIVE_NAME%" "-xr!*.7z" "-xr!*.bat" "-xr!*.ps1" 2>nul
 )
 
 set "ARCHIVE_RESULT=%ERRORLEVEL%"
 if "%DEBUG%"=="1" echo [DEBUG] 7-Zip archive creation exit code: %ARCHIVE_RESULT%
 
-if %ARCHIVE_RESULT% GTR 0 (
+REM 7-Zip exit codes: 0=success, 1=warning(non-fatal), 2=fatal error, 7=command line error, 8=not enough memory, 255=user stopped
+if %ARCHIVE_RESULT% EQU 2 (
+    echo [-] Failed to create archive - Fatal Error (Error Level: 2)
+    echo [!] This usually means no files matched the pattern or permission denied
+    echo [!] Path used: "%SEVEN_ZIP_EXE%"
+    echo.
+    if "%DEBUG%"=="1" (
+        echo [DEBUG] Listing files that would be archived:
+        dir /b /s "%CD%" | findstr /v /i "%ARCHIVE_NAME%" | findstr /v /i ".7z$" | findstr /v /i ".bat$" | findstr /v /i ".ps1$"
+    )
+    echo [-] Operation aborted - no files will be deleted
+    pause
+    exit /b 1
+)
+
+if %ARCHIVE_RESULT% GTR 2 (
     echo [-] Failed to create archive (Error Level: %ARCHIVE_RESULT%)
     echo [!] Possible causes:
-    echo [!]   - Insufficient disk space
-    echo [!]   - Permission denied
-    echo [!]   - 7-Zip executable error
-    echo [!]   - No files to archive
+    echo [!]   - Error code 7: Command line error (check password special characters)
+    echo [!]   - Error code 8: Not enough memory
+    echo [!]   - Other: System error
     echo [!] Path used: "%SEVEN_ZIP_EXE%"
     echo.
     if "%DEBUG%"=="1" (
@@ -497,6 +553,11 @@ if %ARCHIVE_RESULT% GTR 0 (
     echo [-] Operation aborted - no files will be deleted
     pause
     exit /b 1
+)
+
+REM Exit code 0 or 1 is acceptable (1 = warnings but success)
+if %ARCHIVE_RESULT% EQU 1 (
+    echo [!] Warning: Archive created with warnings (non-fatal)
 )
 
 if "%DEBUG%"=="1" echo [DEBUG] Checking if archive file was created...

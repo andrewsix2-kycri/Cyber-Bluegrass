@@ -261,15 +261,17 @@ function Install-SevenZipMSI {
     Write-Status "Installing from MSI: $(Split-Path -Leaf $MsiPath)" -Type Info
 
     try {
-        # Silent install with msiexec
-        if ($DebugMode) { Write-Host "[DEBUG] Running: msiexec /i `"$MsiPath`" /qn /norestart" -ForegroundColor Magenta }
+        # Silent install with msiexec - include INSTALLDIR to control location
+        if ($DebugMode) { Write-Host "[DEBUG] Running: msiexec /i `"$MsiPath`" /qn /norestart INSTALLDIR=`"$env:ProgramFiles\7-Zip`"" -ForegroundColor Magenta }
 
-        $proc = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", "`"$MsiPath`"", "/qn", "/norestart" -Wait -PassThru -NoNewWindow
-        Start-Sleep -Seconds 8
+        Write-Status "Installing 7-Zip (this may take a moment)..." -Type Info
+        $proc = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", "`"$MsiPath`"", "/qn", "/norestart", "INSTALLDIR=`"$env:ProgramFiles\7-Zip`"" -Wait -PassThru -NoNewWindow
+        Write-Status "Waiting for installation to settle..." -Type Info
+        Start-Sleep -Seconds 5
 
         if ($DebugMode) { Write-Host "[DEBUG] MSI install exit code: $($proc.ExitCode)" -ForegroundColor Magenta }
 
-        # Check installation locations
+        # Check and TEST installation locations
         $locations = @(
             "$env:ProgramFiles\7-Zip\7z.exe",
             "${env:ProgramFiles(x86)}\7-Zip\7z.exe"
@@ -277,12 +279,25 @@ function Install-SevenZipMSI {
 
         foreach ($loc in $locations) {
             if (Test-Path $loc) {
-                Write-Status "MSI installation successful" -Type Success
-                return $loc
+                if ($DebugMode) { Write-Host "[DEBUG] Found at $loc, testing if it works..." -ForegroundColor Magenta }
+                try {
+                    $testProc = Start-Process -FilePath $loc -ArgumentList "--help" -Wait -PassThru -NoNewWindow -RedirectStandardOutput "$env:TEMP\7z_test.txt" -RedirectStandardError "$env:TEMP\7z_err.txt" -ErrorAction Stop
+                    Remove-Item "$env:TEMP\7z_test.txt" -Force -ErrorAction SilentlyContinue
+                    Remove-Item "$env:TEMP\7z_err.txt" -Force -ErrorAction SilentlyContinue
+
+                    if ($testProc.ExitCode -le 1) {
+                        Write-Status "MSI installation successful - 7z.exe is WORKING" -Type Success
+                        return $loc
+                    } else {
+                        Write-Status "7z.exe installed but not working (exit code: $($testProc.ExitCode))" -Type Warning
+                    }
+                } catch {
+                    Write-Status "7z.exe installed but failed to test: $($_.Exception.Message)" -Type Warning
+                }
             }
         }
 
-        Write-Status "MSI installation did not create 7z.exe in expected location" -Type Warning
+        Write-Status "MSI installation failed - 7z.exe not found or not working" -Type Warning
         return $null
 
     } catch {
@@ -310,11 +325,12 @@ function Install-SevenZipEXE {
         if ($DebugMode) { Write-Host "[DEBUG] Running: `"$ExePath`" /S" -ForegroundColor Magenta }
 
         $proc = Start-Process -FilePath $ExePath -ArgumentList "/S" -Wait -PassThru -NoNewWindow
-        Start-Sleep -Seconds 8
+        Write-Status "Waiting for installation to complete..." -Type Info
+        Start-Sleep -Seconds 10
 
         if ($DebugMode) { Write-Host "[DEBUG] EXE install exit code: $($proc.ExitCode)" -ForegroundColor Magenta }
 
-        # Check installation locations
+        # Check and TEST installation locations
         $locations = @(
             "$env:ProgramFiles\7-Zip\7z.exe",
             "${env:ProgramFiles(x86)}\7-Zip\7z.exe"
@@ -322,12 +338,25 @@ function Install-SevenZipEXE {
 
         foreach ($loc in $locations) {
             if (Test-Path $loc) {
-                Write-Status "EXE installation successful" -Type Success
-                return $loc
+                if ($DebugMode) { Write-Host "[DEBUG] Found at $loc, testing if it works..." -ForegroundColor Magenta }
+                try {
+                    $testProc = Start-Process -FilePath $loc -ArgumentList "--help" -Wait -PassThru -NoNewWindow -RedirectStandardOutput "$env:TEMP\7z_test.txt" -RedirectStandardError "$env:TEMP\7z_err.txt" -ErrorAction Stop
+                    Remove-Item "$env:TEMP\7z_test.txt" -Force -ErrorAction SilentlyContinue
+                    Remove-Item "$env:TEMP\7z_err.txt" -Force -ErrorAction SilentlyContinue
+
+                    if ($testProc.ExitCode -le 1) {
+                        Write-Status "EXE installation successful - 7z.exe is WORKING" -Type Success
+                        return $loc
+                    } else {
+                        Write-Status "7z.exe installed but not working (exit code: $($testProc.ExitCode))" -Type Warning
+                    }
+                } catch {
+                    Write-Status "7z.exe installed but failed to test: $($_.Exception.Message)" -Type Warning
+                }
             }
         }
 
-        Write-Status "EXE installation did not create 7z.exe in expected location" -Type Warning
+        Write-Status "EXE installation failed - 7z.exe not found or not working" -Type Warning
         return $null
 
     } catch {
@@ -346,7 +375,7 @@ function Get-SevenZipExhaustive {
     Write-Status "Exhaustive 7-Zip acquisition strategy..." -Type Info
 
     # ========================================================================
-    # Phase 1: Check for existing 7z.exe
+    # Phase 1: Check for existing 7z.exe AND VERIFY IT WORKS
     # ========================================================================
     Write-Status "Phase 1: Checking for existing 7z.exe..." -Type Info
 
@@ -360,17 +389,45 @@ function Get-SevenZipExhaustive {
     foreach ($path in $searchPaths) {
         if ($DebugMode) { Write-Host "[DEBUG] Checking: $path" -ForegroundColor Magenta }
         if (Test-Path $path -ErrorAction SilentlyContinue) {
-            Write-Status "Found 7z.exe at: $path" -Type Success
-            return $path
+            if ($DebugMode) { Write-Host "[DEBUG] File exists, testing if it works..." -ForegroundColor Magenta }
+            try {
+                $testProc = Start-Process -FilePath $path -ArgumentList "--help" -Wait -PassThru -NoNewWindow -RedirectStandardOutput "$env:TEMP\7z_test.txt" -RedirectStandardError "$env:TEMP\7z_err.txt" -ErrorAction Stop
+                Remove-Item "$env:TEMP\7z_test.txt" -Force -ErrorAction SilentlyContinue
+                Remove-Item "$env:TEMP\7z_err.txt" -Force -ErrorAction SilentlyContinue
+
+                if ($testProc.ExitCode -le 1) {
+                    Write-Status "Found WORKING 7z.exe at: $path" -Type Success
+                    return $path
+                } else {
+                    Write-Status "Found 7z.exe at $path but it's not working (exit code: $($testProc.ExitCode))" -Type Warning
+                }
+            } catch {
+                Write-Status "Found 7z.exe at $path but failed to test it: $($_.Exception.Message)" -Type Warning
+            }
         }
     }
 
     # Check PATH
     $pathExe = Get-Command "7z.exe" -ErrorAction SilentlyContinue
     if ($pathExe) {
-        Write-Status "Found 7z.exe in system PATH" -Type Success
-        return $pathExe.Source
+        if ($DebugMode) { Write-Host "[DEBUG] Found in PATH, testing..." -ForegroundColor Magenta }
+        try {
+            $testProc = Start-Process -FilePath $pathExe.Source -ArgumentList "--help" -Wait -PassThru -NoNewWindow -RedirectStandardOutput "$env:TEMP\7z_test.txt" -RedirectStandardError "$env:TEMP\7z_err.txt" -ErrorAction Stop
+            Remove-Item "$env:TEMP\7z_test.txt" -Force -ErrorAction SilentlyContinue
+            Remove-Item "$env:TEMP\7z_err.txt" -Force -ErrorAction SilentlyContinue
+
+            if ($testProc.ExitCode -le 1) {
+                Write-Status "Found WORKING 7z.exe in system PATH" -Type Success
+                return $pathExe.Source
+            } else {
+                Write-Status "Found 7z.exe in PATH but it's not working" -Type Warning
+            }
+        } catch {
+            Write-Status "Found 7z.exe in PATH but failed to test it" -Type Warning
+        }
     }
+
+    Write-Status "No working 7z.exe found in existing locations" -Type Warning
 
     # ========================================================================
     # Phase 2: Check for local installer files
@@ -544,28 +601,35 @@ Operation aborted.
     }
 
     # Build 7-Zip arguments - exclude scripts and existing archives
+    # Note: Password wrapped in quotes to handle special characters
     $arguments = @(
-        "a",                    # Add to archive
-        "-t7z",                 # Archive type
-        "-m0=lzma2",           # Compression method
-        "-mx=9",               # Maximum compression
-        "-mfb=64",             # Fast bytes
-        "-md=32m",             # Dictionary size
-        "-ms=on",              # Solid archive
-        "-mhe=on",             # Encrypt headers
-        "-p$Password",         # Password
-        "`"$archivePath`"",    # Archive path
-        "`"$CurrentDir\*`"",   # Files to archive
-        "-r",                  # Recursive
-        "-x!$ArchiveName",     # Exclude the archive itself
-        "-xr!*.7z",            # Exclude other 7z files
-        "-xr!*.ps1",           # Exclude PowerShell scripts
-        "-xr!*.bat"            # Exclude batch scripts
+        "a",                        # Add to archive
+        "-t7z",                     # Archive type
+        "-m0=lzma2",               # Compression method
+        "-mx=9",                   # Maximum compression
+        "-mfb=64",                 # Fast bytes
+        "-md=32m",                 # Dictionary size
+        "-ms=on",                  # Solid archive
+        "-mhe=on",                 # Encrypt headers
+        "-p`"$Password`"",         # Password (quoted for special chars)
+        "`"$archivePath`"",        # Archive path
+        "`"$CurrentDir\*`"",       # Files to archive
+        "-r",                      # Recursive
+        "-x!$ArchiveName",         # Exclude the archive itself
+        "-xr!*.7z",                # Exclude other 7z files
+        "-xr!*.ps1",               # Exclude PowerShell scripts
+        "-xr!*.bat"                # Exclude batch scripts
     )
 
     if ($DebugMode) {
         Write-Host "[DEBUG] 7-Zip command arguments:" -ForegroundColor Magenta
-        $arguments | ForEach-Object { Write-Host "[DEBUG]   $_" -ForegroundColor Magenta }
+        $arguments | ForEach-Object {
+            if ($_ -like "*-p*") {
+                Write-Host "[DEBUG]   -p[PASSWORD_HIDDEN]" -ForegroundColor Magenta
+            } else {
+                Write-Host "[DEBUG]   $_" -ForegroundColor Magenta
+            }
+        }
     }
 
     try {
@@ -580,8 +644,38 @@ Operation aborted.
             Write-Host "[DEBUG] 7-Zip process completed with exit code: $($process.ExitCode)" -ForegroundColor Magenta
         }
 
-        if ($process.ExitCode -ne 0) {
-            throw "7-Zip process exited with code: $($process.ExitCode)"
+        # 7-Zip exit codes: 0=success, 1=warning(non-fatal), 2=fatal error, 7=command line error, 8=not enough memory
+        if ($process.ExitCode -eq 2) {
+            throw @"
+7-Zip fatal error (exit code 2)
+This usually means:
+  - No files matched the archive pattern
+  - Permission denied
+  - Disk error
+"@
+        }
+
+        if ($process.ExitCode -eq 7) {
+            throw @"
+7-Zip command line error (exit code 7)
+This usually means:
+  - Password contains problematic special characters
+  - Invalid command syntax
+  - Path too long
+"@
+        }
+
+        if ($process.ExitCode -eq 8) {
+            throw "7-Zip error: Not enough memory (exit code 8)"
+        }
+
+        if ($process.ExitCode -gt 2) {
+            throw "7-Zip process exited with error code: $($process.ExitCode)"
+        }
+
+        # Exit code 1 is a warning but not fatal
+        if ($process.ExitCode -eq 1) {
+            Write-Status "Archive created with warnings (non-fatal)" -Type Warning
         }
 
         # Verify the file was actually created
