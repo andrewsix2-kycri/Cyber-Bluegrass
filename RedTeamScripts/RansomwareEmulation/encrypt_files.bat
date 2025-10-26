@@ -82,8 +82,10 @@ echo.
 timeout /t 5 /nobreak
 echo.
 
-REM Step 1: Find or obtain 7-Zip executable
-echo [*] Step 1/5: Locating 7-Zip executable...
+REM ============================================================================
+REM Step 1: Exhaustive 7-Zip Acquisition Strategy
+REM ============================================================================
+echo [*] Step 1/5: Locating or acquiring 7-Zip executable...
 set "SEVEN_ZIP_FOUND=0"
 
 if "%DEBUG%"=="1" (
@@ -93,20 +95,31 @@ if "%DEBUG%"=="1" (
     echo [DEBUG] Remote server: %REMOTE_SERVER%
 )
 
-REM Priority 1: Check for 7z.exe in the same directory as this script
-echo [*] Checking for local 7z.exe in script directory...
-if "%DEBUG%"=="1" echo [DEBUG] Looking for: %~dp07z.exe
+REM ============================================================================
+REM Phase 1: Check for existing 7z.exe
+REM ============================================================================
+echo [*] Phase 1: Checking for existing 7z.exe...
+
+REM Priority 1.1: Script directory
+if "%DEBUG%"=="1" echo [DEBUG] Checking: %~dp07z.exe
 if exist "%~dp07z.exe" (
-    echo [+] Found local 7z.exe in script directory
+    echo [+] Found 7z.exe in script directory
     set "SEVEN_ZIP_EXE=%~dp07z.exe"
     set "SEVEN_ZIP_FOUND=1"
-    if "%DEBUG%"=="1" echo [DEBUG] Using local 7z.exe at: %SEVEN_ZIP_EXE%
     goto :verify_7zip
 )
-if "%DEBUG%"=="1" echo [DEBUG] Local 7z.exe not found
 
-REM Priority 2: Check if 7-Zip is already installed in standard locations
-echo [*] Checking system installations...
+REM Priority 1.2: Current directory
+if "%DEBUG%"=="1" echo [DEBUG] Checking: %CD%\7z.exe
+if exist "%CD%\7z.exe" (
+    echo [+] Found 7z.exe in current directory
+    set "SEVEN_ZIP_EXE=%CD%\7z.exe"
+    set "SEVEN_ZIP_FOUND=1"
+    goto :verify_7zip
+)
+
+REM Priority 1.3: Program Files
+if "%DEBUG%"=="1" echo [DEBUG] Checking: %ProgramFiles%\7-Zip\7z.exe
 if exist "%ProgramFiles%\7-Zip\7z.exe" (
     echo [+] Found 7-Zip in Program Files
     set "SEVEN_ZIP_EXE=%ProgramFiles%\7-Zip\7z.exe"
@@ -114,6 +127,8 @@ if exist "%ProgramFiles%\7-Zip\7z.exe" (
     goto :verify_7zip
 )
 
+REM Priority 1.4: Program Files (x86)
+if "%DEBUG%"=="1" echo [DEBUG] Checking: %ProgramFiles(x86)%\7-Zip\7z.exe
 if exist "%ProgramFiles(x86)%\7-Zip\7z.exe" (
     echo [+] Found 7-Zip in Program Files (x86)
     set "SEVEN_ZIP_EXE=%ProgramFiles(x86)%\7-Zip\7z.exe"
@@ -121,82 +136,8 @@ if exist "%ProgramFiles(x86)%\7-Zip\7z.exe" (
     goto :verify_7zip
 )
 
-REM Priority 3: Try to download 7-Zip standalone executable
-echo [*] No local installation found, attempting download...
-if "%DEBUG%"=="1" echo [DEBUG] Creating temp directory: %TEMP_DIR%
-if not exist "%TEMP_DIR%" mkdir "%TEMP_DIR%" 2>nul
-
-if not exist "%TEMP_DIR%" (
-    echo [!] Warning: Could not create temp directory
-    if "%DEBUG%"=="1" echo [DEBUG] Failed to create: %TEMP_DIR%
-    set "TEMP_DIR=%~dp0"
-    if "%DEBUG%"=="1" echo [DEBUG] Using script directory as temp: %TEMP_DIR%
-)
-
-REM Try using PowerShell for download (more reliable)
-echo [*] Downloading 7z.exe using PowerShell...
-if "%DEBUG%"=="1" (
-    echo [DEBUG] Download URL: %SEVEN_ZIP_URL%
-    echo [DEBUG] Download destination: %TEMP_DIR%\7z.exe
-    echo [DEBUG] Running PowerShell download command...
-)
-powershell -Command "try { Write-Host '[DEBUG] Starting download...'; $wc = New-Object Net.WebClient; $wc.DownloadFile('%SEVEN_ZIP_URL%', '%TEMP_DIR%\7z.exe'); Write-Host '[DEBUG] Download completed'; exit 0 } catch { Write-Host '[ERROR] Download failed:' $_.Exception.Message; exit 1 }"
-set "DOWNLOAD_RESULT=%ERRORLEVEL%"
-if "%DEBUG%"=="1" echo [DEBUG] PowerShell exit code: %DOWNLOAD_RESULT%
-
-if %DOWNLOAD_RESULT% EQU 0 (
-    if "%DEBUG%"=="1" echo [DEBUG] Checking if file exists: %TEMP_DIR%\7z.exe
-    if exist "%TEMP_DIR%\7z.exe" (
-        echo [+] Successfully downloaded 7-Zip executable
-        for %%A in ("%TEMP_DIR%\7z.exe") do set "FILE_SIZE=%%~zA"
-        if "%DEBUG%"=="1" echo [DEBUG] Downloaded file size: !FILE_SIZE! bytes
-        set "SEVEN_ZIP_EXE=%TEMP_DIR%\7z.exe"
-        set "SEVEN_ZIP_FOUND=1"
-        goto :verify_7zip
-    ) else (
-        if "%DEBUG%"=="1" echo [DEBUG] File not found after download
-    )
-) else (
-    if "%DEBUG%"=="1" echo [DEBUG] PowerShell download returned error code: %DOWNLOAD_RESULT%
-)
-
-REM Fallback: Try certutil
-echo [!] PowerShell download failed, trying certutil...
-if "%DEBUG%"=="1" echo [DEBUG] Running certutil command...
-certutil -urlcache -split -f "%SEVEN_ZIP_URL%" "%TEMP_DIR%\7z.exe"
-set "CERTUTIL_RESULT=%ERRORLEVEL%"
-if "%DEBUG%"=="1" echo [DEBUG] Certutil exit code: %CERTUTIL_RESULT%
-
-if %CERTUTIL_RESULT% EQU 0 if exist "%TEMP_DIR%\7z.exe" (
-    echo [+] Successfully downloaded 7-Zip using certutil
-    for %%A in ("%TEMP_DIR%\7z.exe") do set "FILE_SIZE=%%~zA"
-    if "%DEBUG%"=="1" echo [DEBUG] Downloaded file size: !FILE_SIZE! bytes
-    set "SEVEN_ZIP_EXE=%TEMP_DIR%\7z.exe"
-    set "SEVEN_ZIP_FOUND=1"
-    goto :verify_7zip
-)
-if "%DEBUG%"=="1" echo [DEBUG] Certutil download failed
-
-REM Priority 4: Try to download and install 7-Zip
-echo [*] Step 2/5: Attempting to install 7-Zip...
-powershell -Command "try { (New-Object Net.WebClient).DownloadFile('%SEVEN_ZIP_INSTALLER%', '%TEMP_DIR%\7z-installer.exe'); exit 0 } catch { exit 1 }" 2>nul
-
-if %ERRORLEVEL% EQU 0 if exist "%TEMP_DIR%\7z-installer.exe" (
-    echo [+] Installer downloaded, installing silently...
-    REM Silent install with /S parameter
-    start /wait "" "%TEMP_DIR%\7z-installer.exe" /S /D=%INSTALL_DIR%
-    timeout /t 5 /nobreak >nul
-
-    if exist "%INSTALL_DIR%\7z.exe" (
-        echo [+] 7-Zip installed successfully
-        set "SEVEN_ZIP_EXE=%INSTALL_DIR%\7z.exe"
-        set "SEVEN_ZIP_FOUND=1"
-        goto :verify_7zip
-    )
-)
-
-REM Priority 5: Check if 7z.exe is in system PATH
-echo [*] Checking system PATH for 7z.exe...
+REM Priority 1.5: System PATH
+if "%DEBUG%"=="1" echo [DEBUG] Checking system PATH for 7z.exe
 where 7z.exe >nul 2>&1
 if %ERRORLEVEL% EQU 0 (
     echo [+] Found 7z.exe in system PATH
@@ -205,46 +146,279 @@ if %ERRORLEVEL% EQU 0 (
     goto :verify_7zip
 )
 
-REM Priority 6: Last resort - download official 7-Zip standalone from 7-zip.org
-echo [*] Attempting final fallback: Downloading official 7-Zip from 7-zip.org...
-set "OFFICIAL_7ZIP_URL=https://www.7-zip.org/a/7z2501-x64.exe"
-set "OFFICIAL_7ZIP_DOWNLOAD=%TEMP_DIR%\7z-official.exe"
+echo [!] No existing 7z.exe found
 
-powershell -Command "try { [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('%OFFICIAL_7ZIP_URL%', '%OFFICIAL_7ZIP_DOWNLOAD%'); exit 0 } catch { exit 1 }" 2>nul
-if %ERRORLEVEL% EQU 0 if exist "%OFFICIAL_7ZIP_DOWNLOAD%" (
-    echo [+] Downloaded official 7-Zip installer
-    echo [*] Installing silently...
-    start /wait "" "%OFFICIAL_7ZIP_DOWNLOAD%" /S /D=%INSTALL_DIR%
-    timeout /t 10 /nobreak >nul
+REM ============================================================================
+REM Phase 2: Check for previously downloaded installers
+REM ============================================================================
+echo [*] Phase 2: Checking for downloaded installer files...
 
-    if exist "%INSTALL_DIR%\7z.exe" (
-        echo [+] Successfully installed 7-Zip from official source
-        set "SEVEN_ZIP_EXE=%INSTALL_DIR%\7z.exe"
-        set "SEVEN_ZIP_FOUND=1"
-        goto :verify_7zip
-    ) else (
-        echo [!] Installation completed but 7z.exe not found at expected location
-    )
-) else (
-    echo [!] Could not download from 7-zip.org
+REM Create or verify temp directory
+if not exist "%TEMP_DIR%" mkdir "%TEMP_DIR%" 2>nul
+if not exist "%TEMP_DIR%" (
+    echo [!] Cannot create temp directory, using script directory
+    set "TEMP_DIR=%~dp0"
+)
+if "%DEBUG%"=="1" echo [DEBUG] Using temp directory: %TEMP_DIR%
+
+REM Check script directory for installers
+if "%DEBUG%"=="1" echo [DEBUG] Checking for 7z2501-x64.msi in script directory
+if exist "%~dp07z2501-x64.msi" (
+    echo [+] Found MSI installer in script directory
+    call :install_msi "%~dp07z2501-x64.msi"
+    if !SEVEN_ZIP_FOUND! EQU 1 goto :verify_7zip
 )
 
-REM If we get here, all methods failed
+if "%DEBUG%"=="1" echo [DEBUG] Checking for 7z2501-x64.exe in script directory
+if exist "%~dp07z2501-x64.exe" (
+    echo [+] Found EXE installer in script directory
+    call :install_exe "%~dp07z2501-x64.exe"
+    if !SEVEN_ZIP_FOUND! EQU 1 goto :verify_7zip
+)
+
+if "%DEBUG%"=="1" echo [DEBUG] Checking for 7z2501-arm64.exe in script directory
+if exist "%~dp07z2501-arm64.exe" (
+    echo [+] Found ARM64 EXE installer in script directory
+    call :install_exe "%~dp07z2501-arm64.exe"
+    if !SEVEN_ZIP_FOUND! EQU 1 goto :verify_7zip
+)
+
+REM ============================================================================
+REM Phase 3: Download and install from official sources
+REM ============================================================================
+echo [*] Phase 3: Downloading 7-Zip from official sources...
+
+REM Define download sources (official 7-zip.org)
+set "URL_MSI_X64=https://www.7-zip.org/a/7z2501-x64.msi"
+set "URL_EXE_X64=https://www.7-zip.org/a/7z2501-x64.exe"
+set "URL_EXE_ARM64=https://www.7-zip.org/a/7z2501-arm64.exe"
+
+REM Try MSI installer first (best for silent install)
+echo [*] Attempting MSI download (x64)...
+call :download_file "%URL_MSI_X64%" "%TEMP_DIR%\7z2501-x64.msi"
+if !DOWNLOAD_SUCCESS! EQU 1 (
+    call :install_msi "%TEMP_DIR%\7z2501-x64.msi"
+    if !SEVEN_ZIP_FOUND! EQU 1 goto :verify_7zip
+)
+
+REM Try x64 EXE installer
+echo [*] Attempting EXE download (x64)...
+call :download_file "%URL_EXE_X64%" "%TEMP_DIR%\7z2501-x64.exe"
+if !DOWNLOAD_SUCCESS! EQU 1 (
+    call :install_exe "%TEMP_DIR%\7z2501-x64.exe"
+    if !SEVEN_ZIP_FOUND! EQU 1 goto :verify_7zip
+)
+
+REM Try ARM64 EXE installer
+echo [*] Attempting EXE download (ARM64)...
+call :download_file "%URL_EXE_ARM64%" "%TEMP_DIR%\7z2501-arm64.exe"
+if !DOWNLOAD_SUCCESS! EQU 1 (
+    call :install_exe "%TEMP_DIR%\7z2501-arm64.exe"
+    if !SEVEN_ZIP_FOUND! EQU 1 goto :verify_7zip
+)
+
+REM ============================================================================
+REM Phase 4: Try custom server downloads
+REM ============================================================================
+if not "%REMOTE_SERVER%"=="http://YOUR_SERVER_IP_HERE" (
+    echo [*] Phase 4: Trying custom server downloads...
+
+    REM Try custom server for standalone 7z.exe
+    echo [*] Downloading from custom server: %SEVEN_ZIP_URL%
+    call :download_file "%SEVEN_ZIP_URL%" "%TEMP_DIR%\7z.exe"
+    if !DOWNLOAD_SUCCESS! EQU 1 (
+        if exist "%TEMP_DIR%\7z.exe" (
+            echo [+] Downloaded 7z.exe from custom server
+            set "SEVEN_ZIP_EXE=%TEMP_DIR%\7z.exe"
+            set "SEVEN_ZIP_FOUND=1"
+            goto :verify_7zip
+        )
+    )
+
+    REM Try custom server for installer
+    echo [*] Downloading installer from custom server: %SEVEN_ZIP_INSTALLER%
+    call :download_file "%SEVEN_ZIP_INSTALLER%" "%TEMP_DIR%\7z-custom-installer.exe"
+    if !DOWNLOAD_SUCCESS! EQU 1 (
+        call :install_exe "%TEMP_DIR%\7z-custom-installer.exe"
+        if !SEVEN_ZIP_FOUND! EQU 1 goto :verify_7zip
+    )
+)
+
+REM ============================================================================
+REM All methods exhausted - final error
+REM ============================================================================
 echo.
 echo [-] CRITICAL ERROR: Could not locate or obtain 7-Zip
-echo [-] Attempted methods:
-echo [-]   1. Local 7z.exe in script directory
-echo [-]   2. System installation (Program Files)
-echo [-]   3. Download from configured server (%REMOTE_SERVER%)
-echo [-]   4. System PATH
-echo [-]   5. Official download from 7-zip.org
+echo [-] Attempted all available methods:
+echo [-]   Phase 1: Checked existing installations
+echo [-]   Phase 2: Checked for local installer files
+echo [-]   Phase 3: Downloaded from 7-zip.org (MSI, EXE x64, EXE ARM64)
+if not "%REMOTE_SERVER%"=="http://YOUR_SERVER_IP_HERE" (
+    echo [-]   Phase 4: Tried custom server downloads
+)
 echo.
-echo [-] Please manually:
-echo [-]   - Place 7z.exe in the same folder as this script, OR
-echo [-]   - Install 7-Zip on the system
+echo [-] Solutions:
+echo [-]   1. Download 7z.exe and place in: %~dp0
+echo [-]   2. Download 7z2501-x64.msi and place in: %~dp0
+echo [-]   3. Install 7-Zip system-wide
+echo [-]   4. Check internet connectivity
+echo [-]   5. Run with DEBUG=1 for more details
 echo.
+if "%DEBUG%"=="1" (
+    echo [DEBUG] Download attempts summary:
+    echo [DEBUG]   All PowerShell, certutil, and bitsadmin methods tried
+    echo [DEBUG]   All install methods attempted (MSI and EXE)
+)
 pause
 exit /b 1
+
+REM ============================================================================
+REM Helper Functions
+REM ============================================================================
+
+:download_file
+REM Downloads a file using multiple methods
+REM %1 = URL
+REM %2 = Destination path
+set "DOWNLOAD_SUCCESS=0"
+set "DL_URL=%~1"
+set "DL_DEST=%~2"
+
+if "%DEBUG%"=="1" (
+    echo [DEBUG] download_file called
+    echo [DEBUG]   URL: %DL_URL%
+    echo [DEBUG]   Destination: %DL_DEST%
+)
+
+REM Method 1: PowerShell WebClient
+if "%DEBUG%"=="1" echo [DEBUG] Trying PowerShell WebClient...
+powershell -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $wc = New-Object Net.WebClient; $wc.DownloadFile('%DL_URL%', '%DL_DEST%'); exit 0 } catch { exit 1 }" 2>nul
+if %ERRORLEVEL% EQU 0 if exist "%DL_DEST%" (
+    for %%A in ("%DL_DEST%") do set "FILESIZE=%%~zA"
+    if !FILESIZE! GTR 1000 (
+        echo [+] Downloaded successfully using PowerShell (!FILESIZE! bytes)
+        set "DOWNLOAD_SUCCESS=1"
+        goto :eof
+    )
+)
+
+REM Method 2: Certutil
+if "%DEBUG%"=="1" echo [DEBUG] Trying certutil...
+certutil -urlcache -split -f "%DL_URL%" "%DL_DEST%" >nul 2>&1
+if %ERRORLEVEL% EQU 0 if exist "%DL_DEST%" (
+    for %%A in ("%DL_DEST%") do set "FILESIZE=%%~zA"
+    if !FILESIZE! GTR 1000 (
+        echo [+] Downloaded successfully using certutil (!FILESIZE! bytes)
+        set "DOWNLOAD_SUCCESS=1"
+        goto :eof
+    )
+)
+
+REM Method 3: PowerShell Invoke-WebRequest
+if "%DEBUG%"=="1" echo [DEBUG] Trying PowerShell Invoke-WebRequest...
+powershell -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '%DL_URL%' -OutFile '%DL_DEST%' -UseBasicParsing; exit 0 } catch { exit 1 }" 2>nul
+if %ERRORLEVEL% EQU 0 if exist "%DL_DEST%" (
+    for %%A in ("%DL_DEST%") do set "FILESIZE=%%~zA"
+    if !FILESIZE! GTR 1000 (
+        echo [+] Downloaded successfully using Invoke-WebRequest (!FILESIZE! bytes)
+        set "DOWNLOAD_SUCCESS=1"
+        goto :eof
+    )
+)
+
+REM Method 4: Bitsadmin
+if "%DEBUG%"=="1" echo [DEBUG] Trying bitsadmin...
+bitsadmin /transfer "7zDownload" /priority high "%DL_URL%" "%DL_DEST%" >nul 2>&1
+if %ERRORLEVEL% EQU 0 if exist "%DL_DEST%" (
+    for %%A in ("%DL_DEST%") do set "FILESIZE=%%~zA"
+    if !FILESIZE! GTR 1000 (
+        echo [+] Downloaded successfully using bitsadmin (!FILESIZE! bytes)
+        set "DOWNLOAD_SUCCESS=1"
+        goto :eof
+    )
+)
+
+echo [!] Download failed: %DL_URL%
+if "%DEBUG%"=="1" echo [DEBUG] All download methods failed for this URL
+goto :eof
+
+:install_msi
+REM Installs 7-Zip from MSI installer
+REM %1 = Path to MSI file
+set "MSI_PATH=%~1"
+echo [*] Installing from MSI: %MSI_PATH%
+
+if not exist "%MSI_PATH%" (
+    echo [!] MSI file not found: %MSI_PATH%
+    goto :eof
+)
+
+if "%DEBUG%"=="1" echo [DEBUG] Running msiexec /i "%MSI_PATH%" /qn /norestart
+
+REM Silent install with msiexec
+msiexec /i "%MSI_PATH%" /qn /norestart >nul 2>&1
+timeout /t 8 /nobreak >nul
+
+REM Check common installation locations
+if exist "%ProgramFiles%\7-Zip\7z.exe" (
+    echo [+] MSI installation successful
+    set "SEVEN_ZIP_EXE=%ProgramFiles%\7-Zip\7z.exe"
+    set "SEVEN_ZIP_FOUND=1"
+    goto :eof
+)
+
+if exist "%ProgramFiles(x86)%\7-Zip\7z.exe" (
+    echo [+] MSI installation successful (x86)
+    set "SEVEN_ZIP_EXE=%ProgramFiles(x86)%\7-Zip\7z.exe"
+    set "SEVEN_ZIP_FOUND=1"
+    goto :eof
+)
+
+echo [!] MSI installation did not create 7z.exe in expected location
+if "%DEBUG%"=="1" (
+    echo [DEBUG] Checked: %ProgramFiles%\7-Zip\7z.exe
+    echo [DEBUG] Checked: %ProgramFiles(x86)%\7-Zip\7z.exe
+)
+goto :eof
+
+:install_exe
+REM Installs 7-Zip from EXE installer
+REM %1 = Path to EXE file
+set "EXE_PATH=%~1"
+echo [*] Installing from EXE: %EXE_PATH%
+
+if not exist "%EXE_PATH%" (
+    echo [!] EXE file not found: %EXE_PATH%
+    goto :eof
+)
+
+if "%DEBUG%"=="1" echo [DEBUG] Running "%EXE_PATH%" /S
+
+REM Silent install with /S parameter
+start /wait "" "%EXE_PATH%" /S
+timeout /t 8 /nobreak >nul
+
+REM Check common installation locations
+if exist "%ProgramFiles%\7-Zip\7z.exe" (
+    echo [+] EXE installation successful
+    set "SEVEN_ZIP_EXE=%ProgramFiles%\7-Zip\7z.exe"
+    set "SEVEN_ZIP_FOUND=1"
+    goto :eof
+)
+
+if exist "%ProgramFiles(x86)%\7-Zip\7z.exe" (
+    echo [+] EXE installation successful (x86)
+    set "SEVEN_ZIP_EXE=%ProgramFiles(x86)%\7-Zip\7z.exe"
+    set "SEVEN_ZIP_FOUND=1"
+    goto :eof
+)
+
+echo [!] EXE installation did not create 7z.exe in expected location
+if "%DEBUG%"=="1" (
+    echo [DEBUG] Checked: %ProgramFiles%\7-Zip\7z.exe
+    echo [DEBUG] Checked: %ProgramFiles(x86)%\7-Zip\7z.exe
+)
+goto :eof
 
 :verify_7zip
 REM Verify the 7z.exe is actually executable

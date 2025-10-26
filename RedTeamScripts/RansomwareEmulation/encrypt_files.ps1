@@ -246,50 +246,194 @@ function Find-SevenZip {
     return $null
 }
 
-function Download-Official7Zip {
+function Install-SevenZipMSI {
     param(
-        [string]$InstallDirectory
+        [string]$MsiPath
     )
 
+    if ($DebugMode) { Write-Host "[DEBUG] Install-SevenZipMSI: $MsiPath" -ForegroundColor Magenta }
+
+    if (-not (Test-Path $MsiPath)) {
+        Write-Status "MSI file not found: $MsiPath" -Type Warning
+        return $null
+    }
+
+    Write-Status "Installing from MSI: $(Split-Path -Leaf $MsiPath)" -Type Info
+
     try {
-        Write-Status "Attempting to download official 7-Zip from 7-zip.org..." -Type Info
+        # Silent install with msiexec
+        if ($DebugMode) { Write-Host "[DEBUG] Running: msiexec /i `"$MsiPath`" /qn /norestart" -ForegroundColor Magenta }
 
-        # Force TLS 1.2 for compatibility
-        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+        $proc = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", "`"$MsiPath`"", "/qn", "/norestart" -Wait -PassThru -NoNewWindow
+        Start-Sleep -Seconds 8
 
-        $officialUrl = "https://www.7-zip.org/a/7z2501-x64.exe"
-        $downloadPath = Join-Path $env:TEMP "7z-official-installer.exe"
+        if ($DebugMode) { Write-Host "[DEBUG] MSI install exit code: $($proc.ExitCode)" -ForegroundColor Magenta }
 
-        # Download the official installer
-        $webClient = New-Object System.Net.WebClient
-        $webClient.DownloadFile($officialUrl, $downloadPath)
+        # Check installation locations
+        $locations = @(
+            "$env:ProgramFiles\7-Zip\7z.exe",
+            "${env:ProgramFiles(x86)}\7-Zip\7z.exe"
+        )
 
-        if (Test-Path $downloadPath) {
-            Write-Status "Downloaded official 7-Zip installer" -Type Success
-            Write-Status "Installing silently..." -Type Info
-
-            # Run silent installation
-            $installProcess = Start-Process -FilePath $downloadPath -ArgumentList "/S", "/D=$InstallDirectory" -Wait -PassThru -NoNewWindow
-            Start-Sleep -Seconds 10
-
-            # Check if installation succeeded
-            $expectedPath = Join-Path $InstallDirectory "7z.exe"
-            if (Test-Path $expectedPath) {
-                Write-Status "Successfully installed 7-Zip from official source" -Type Success
-
-                # Cleanup installer
-                Remove-Item $downloadPath -Force -ErrorAction SilentlyContinue
-
-                return $expectedPath
-            } else {
-                Write-Status "Installation completed but 7z.exe not found at expected location" -Type Warning
+        foreach ($loc in $locations) {
+            if (Test-Path $loc) {
+                Write-Status "MSI installation successful" -Type Success
+                return $loc
             }
-
-            # Cleanup on failure
-            Remove-Item $downloadPath -Force -ErrorAction SilentlyContinue
         }
+
+        Write-Status "MSI installation did not create 7z.exe in expected location" -Type Warning
+        return $null
+
     } catch {
-        Write-Status "Failed to download/install from 7-zip.org: $($_.Exception.Message)" -Type Warning
+        Write-Status "MSI installation failed: $($_.Exception.Message)" -Type Warning
+        return $null
+    }
+}
+
+function Install-SevenZipEXE {
+    param(
+        [string]$ExePath
+    )
+
+    if ($DebugMode) { Write-Host "[DEBUG] Install-SevenZipEXE: $ExePath" -ForegroundColor Magenta }
+
+    if (-not (Test-Path $ExePath)) {
+        Write-Status "EXE file not found: $ExePath" -Type Warning
+        return $null
+    }
+
+    Write-Status "Installing from EXE: $(Split-Path -Leaf $ExePath)" -Type Info
+
+    try {
+        # Silent install with /S parameter
+        if ($DebugMode) { Write-Host "[DEBUG] Running: `"$ExePath`" /S" -ForegroundColor Magenta }
+
+        $proc = Start-Process -FilePath $ExePath -ArgumentList "/S" -Wait -PassThru -NoNewWindow
+        Start-Sleep -Seconds 8
+
+        if ($DebugMode) { Write-Host "[DEBUG] EXE install exit code: $($proc.ExitCode)" -ForegroundColor Magenta }
+
+        # Check installation locations
+        $locations = @(
+            "$env:ProgramFiles\7-Zip\7z.exe",
+            "${env:ProgramFiles(x86)}\7-Zip\7z.exe"
+        )
+
+        foreach ($loc in $locations) {
+            if (Test-Path $loc) {
+                Write-Status "EXE installation successful" -Type Success
+                return $loc
+            }
+        }
+
+        Write-Status "EXE installation did not create 7z.exe in expected location" -Type Warning
+        return $null
+
+    } catch {
+        Write-Status "EXE installation failed: $($_.Exception.Message)" -Type Warning
+        return $null
+    }
+}
+
+function Get-SevenZipExhaustive {
+    param(
+        [string]$ScriptDir,
+        [string]$TempDirectory,
+        [string]$CustomServer
+    )
+
+    Write-Status "Exhaustive 7-Zip acquisition strategy..." -Type Info
+
+    # ========================================================================
+    # Phase 1: Check for existing 7z.exe
+    # ========================================================================
+    Write-Status "Phase 1: Checking for existing 7z.exe..." -Type Info
+
+    $searchPaths = @(
+        (Join-Path $ScriptDir "7z.exe"),
+        (Join-Path $PWD "7z.exe"),
+        "$env:ProgramFiles\7-Zip\7z.exe",
+        "${env:ProgramFiles(x86)}\7-Zip\7z.exe"
+    )
+
+    foreach ($path in $searchPaths) {
+        if ($DebugMode) { Write-Host "[DEBUG] Checking: $path" -ForegroundColor Magenta }
+        if (Test-Path $path -ErrorAction SilentlyContinue) {
+            Write-Status "Found 7z.exe at: $path" -Type Success
+            return $path
+        }
+    }
+
+    # Check PATH
+    $pathExe = Get-Command "7z.exe" -ErrorAction SilentlyContinue
+    if ($pathExe) {
+        Write-Status "Found 7z.exe in system PATH" -Type Success
+        return $pathExe.Source
+    }
+
+    # ========================================================================
+    # Phase 2: Check for local installer files
+    # ========================================================================
+    Write-Status "Phase 2: Checking for local installer files..." -Type Info
+
+    $installers = @(
+        @{Path = (Join-Path $ScriptDir "7z2501-x64.msi"); Type = "MSI"},
+        @{Path = (Join-Path $ScriptDir "7z2501-x64.exe"); Type = "EXE"},
+        @{Path = (Join-Path $ScriptDir "7z2501-arm64.exe"); Type = "EXE"}
+    )
+
+    foreach ($installer in $installers) {
+        if (Test-Path $installer.Path) {
+            Write-Status "Found local installer: $(Split-Path -Leaf $installer.Path)" -Type Success
+            if ($installer.Type -eq "MSI") {
+                $result = Install-SevenZipMSI -MsiPath $installer.Path
+            } else {
+                $result = Install-SevenZipEXE -ExePath $installer.Path
+            }
+            if ($result) { return $result }
+        }
+    }
+
+    # ========================================================================
+    # Phase 3: Download from official sources
+    # ========================================================================
+    Write-Status "Phase 3: Downloading from official 7-zip.org..." -Type Info
+
+    $downloads = @(
+        @{Url = "https://www.7-zip.org/a/7z2501-x64.msi"; File = "7z2501-x64.msi"; Type = "MSI"},
+        @{Url = "https://www.7-zip.org/a/7z2501-x64.exe"; File = "7z2501-x64.exe"; Type = "EXE"},
+        @{Url = "https://www.7-zip.org/a/7z2501-arm64.exe"; File = "7z2501-arm64.exe"; Type = "EXE"}
+    )
+
+    foreach ($dl in $downloads) {
+        Write-Status "Attempting download: $($dl.File)..." -Type Info
+        $destPath = Join-Path $TempDirectory $dl.File
+
+        if (Download-File -Url $dl.Url -OutputPath $destPath) {
+            if ($dl.Type -eq "MSI") {
+                $result = Install-SevenZipMSI -MsiPath $destPath
+            } else {
+                $result = Install-SevenZipEXE -ExePath $destPath
+            }
+            if ($result) { return $result }
+        }
+    }
+
+    # ========================================================================
+    # Phase 4: Try custom server
+    # ========================================================================
+    if ($CustomServer -ne "http://YOUR_SERVER_IP_HERE") {
+        Write-Status "Phase 4: Trying custom server downloads..." -Type Info
+
+        # Try standalone 7z.exe from custom server
+        $customExe = Join-Path $TempDirectory "7z-custom.exe"
+        if (Download-File -Url "$CustomServer/7z.exe" -OutputPath $customExe) {
+            if (Test-Path $customExe) {
+                Write-Status "Downloaded 7z.exe from custom server" -Type Success
+                return $customExe
+            }
+        }
     }
 
     return $null
@@ -301,7 +445,7 @@ function Download-Official7Zip {
 
 try {
     # Step 1: Locate or obtain 7-Zip executable
-    Write-Status "Step 1/5: Locating 7-Zip executable..." -Type Info
+    Write-Status "Step 1/5: Exhaustive 7-Zip acquisition..." -Type Info
 
     # Create temp directory if needed
     if (-not (Test-Path $TempDir)) {
@@ -313,80 +457,49 @@ try {
         }
     }
 
-    # Try to find existing 7z.exe (includes script directory as priority)
-    $sevenZipExe = Find-SevenZip -ScriptDirectory $ScriptDirectory
-
-    if ($null -eq $sevenZipExe) {
-        Write-Status "No existing 7-Zip installation found" -Type Warning
-        Write-Status "Attempting to download 7z.exe..." -Type Info
-
-        $downloadPath = "$TempDir\7z.exe"
-
-        if (Download-File -Url $SevenZipUrl -OutputPath $downloadPath) {
-            if (Test-Path $downloadPath) {
-                Write-Status "Successfully downloaded 7-Zip executable" -Type Success
-                $sevenZipExe = $downloadPath
-            } else {
-                Write-Status "Download completed but file not found" -Type Error
-            }
-        } else {
-            Write-Status "Failed to download 7-Zip executable" -Type Error
-
-            # Try to install from installer
-            Write-Status "Step 2/5: Attempting to install 7-Zip from installer..." -Type Info
-            $installerPath = "$TempDir\7z-installer.exe"
-
-            if (Download-File -Url $SevenZipInstallerUrl -OutputPath $installerPath) {
-                Write-Status "Installer downloaded, installing silently..." -Type Info
-
-                try {
-                    # Silent install
-                    $installProcess = Start-Process -FilePath $installerPath -ArgumentList "/S", "/D=$InstallDir" -Wait -PassThru -NoNewWindow -ErrorAction Stop
-                    Start-Sleep -Seconds 5
-
-                    $sevenZipExe = Find-SevenZip -ScriptDirectory $ScriptDirectory
-
-                    if ($null -ne $sevenZipExe) {
-                        Write-Status "7-Zip installed successfully" -Type Success
-                    } else {
-                        throw "Installation completed but 7z.exe not found"
-                    }
-                } catch {
-                    throw "Failed to install 7-Zip: $($_.Exception.Message)"
-                }
-            } else {
-                throw "Could not obtain 7-Zip through any method"
-            }
-        }
-    } else {
-        Write-Status "Found 7-Zip at: $sevenZipExe" -Type Success
+    if ($DebugMode) {
+        Write-Host "[DEBUG] Script directory: $ScriptDirectory" -ForegroundColor Magenta
+        Write-Host "[DEBUG] Temp directory: $TempDir" -ForegroundColor Magenta
+        Write-Host "[DEBUG] Remote server: $RemoteServer" -ForegroundColor Magenta
     }
 
-    # Final verification - if still no 7z.exe, try official download as last resort
+    # Use exhaustive acquisition function
+    $sevenZipExe = Get-SevenZipExhaustive -ScriptDir $ScriptDirectory -TempDirectory $TempDir -CustomServer $RemoteServer
+
     if ($null -eq $sevenZipExe -or -not (Test-Path $sevenZipExe)) {
-        Write-Status "All standard methods failed, attempting official 7-Zip download..." -Type Warning
+        throw @"
+CRITICAL ERROR: Could not locate or obtain 7-Zip after exhaustive attempts
 
-        $sevenZipExe = Download-Official7Zip -InstallDirectory $InstallDir
+Attempted all methods:
+  Phase 1: Checked existing installations
+    - Script directory
+    - Current directory
+    - Program Files locations
+    - System PATH
 
-        if ($null -eq $sevenZipExe -or -not (Test-Path $sevenZipExe)) {
-            throw @"
-CRITICAL ERROR: Could not locate or obtain 7-Zip
+  Phase 2: Checked for local installer files
+    - 7z2501-x64.msi
+    - 7z2501-x64.exe
+    - 7z2501-arm64.exe
 
-Attempted methods:
-  1. Local 7z.exe in script directory ($ScriptDirectory)
-  2. System installation (Program Files)
-  3. Download from configured server ($RemoteServer)
-  4. Installer from configured server
-  5. System PATH
-  6. Official download from 7-zip.org
+  Phase 3: Downloaded from official 7-zip.org
+    - MSI installer (x64)
+    - EXE installer (x64)
+    - EXE installer (ARM64)
 
-Please manually:
-  - Place 7z.exe in the same folder as this script, OR
-  - Install 7-Zip on the system
+  Phase 4: Tried custom server (if configured)
+
+Solutions:
+  1. Download and place in $ScriptDirectory:
+     - 7z.exe (standalone), OR
+     - 7z2501-x64.msi (recommended), OR
+     - 7z2501-x64.exe
+  2. Install 7-Zip system-wide
+  3. Check internet connectivity
+  4. Run with `$env:DEBUG="1"` for detailed diagnostics
 
 Operation aborted.
 "@
-        }
     }
 
     Write-Status "Using 7-Zip executable: $sevenZipExe" -Type Success
